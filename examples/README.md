@@ -13,10 +13,12 @@ cargo run --example play_oscillators
 ```
 
 **Controls:**
-- **SPACE** - Switch oscillator type (Sine → Triangle → Sawtooth → Square → ...)
+- **SPACE** - Switch oscillator type (Sine → Triangle → Sawtooth → Square → Pulse → Pulse PWM → ...)
 - **Q/ESC** - Quit
 
-Plays a 440 Hz (A4 note) oscillator and lets you hear the differences between waveform types.
+Plays a 440 Hz (A4 note) oscillator and lets you hear the differences between waveform types:
+- **Pulse (25%)**: Fixed 25% duty cycle
+- **Pulse (PWM)**: Duty cycle modulated by a 0.5 Hz LFO, creating a classic sweeping analog synthesizer effect
 
 ### play_noise
 

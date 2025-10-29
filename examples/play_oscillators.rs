@@ -7,12 +7,15 @@ use anyhow::Result;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample, SampleFormat, StreamConfig};
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEvent},
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
+    event::{self, Event, KeyCode, KeyEvent},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use earworm::{SawtoothOscillator, Signal, SineOscillator, SquareOscillator, TriangleOscillator};
-use std::io::{stdout, Write};
+use earworm::{
+    PulseOscillator, SawtoothOscillator, Signal, SineOscillator, SquareOscillator,
+    TriangleOscillator,
+};
+use std::io::{Write, stdout};
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -21,6 +24,8 @@ enum OscillatorType {
     Triangle,
     Sawtooth,
     Square,
+    Pulse,
+    PulseLFO,
 }
 
 impl OscillatorType {
@@ -29,7 +34,9 @@ impl OscillatorType {
             OscillatorType::Sine => OscillatorType::Triangle,
             OscillatorType::Triangle => OscillatorType::Sawtooth,
             OscillatorType::Sawtooth => OscillatorType::Square,
-            OscillatorType::Square => OscillatorType::Sine,
+            OscillatorType::Square => OscillatorType::Pulse,
+            OscillatorType::Pulse => OscillatorType::PulseLFO,
+            OscillatorType::PulseLFO => OscillatorType::Sine,
         }
     }
 
@@ -39,6 +46,8 @@ impl OscillatorType {
             OscillatorType::Triangle => "Triangle",
             OscillatorType::Sawtooth => "Sawtooth",
             OscillatorType::Square => "Square",
+            OscillatorType::Pulse => "Pulse (25%)",
+            OscillatorType::PulseLFO => "Pulse (PWM)",
         }
     }
 }
@@ -48,19 +57,34 @@ enum OscillatorWrapper {
     Triangle(TriangleOscillator),
     Sawtooth(SawtoothOscillator),
     Square(SquareOscillator),
+    Pulse(PulseOscillator<f64>),
+    PulseLFO(PulseOscillator<SineOscillator>),
 }
 
 impl OscillatorWrapper {
     fn new(osc_type: OscillatorType, frequency: f64, sample_rate: f64) -> Self {
         match osc_type {
-            OscillatorType::Sine => OscillatorWrapper::Sine(SineOscillator::new(frequency, sample_rate)),
+            OscillatorType::Sine => {
+                OscillatorWrapper::Sine(SineOscillator::new(frequency, sample_rate))
+            }
             OscillatorType::Triangle => {
                 OscillatorWrapper::Triangle(TriangleOscillator::new(frequency, sample_rate))
             }
             OscillatorType::Sawtooth => {
                 OscillatorWrapper::Sawtooth(SawtoothOscillator::new(frequency, sample_rate))
             }
-            OscillatorType::Square => OscillatorWrapper::Square(SquareOscillator::new(frequency, sample_rate)),
+            OscillatorType::Square => {
+                OscillatorWrapper::Square(SquareOscillator::new(frequency, sample_rate))
+            }
+            OscillatorType::Pulse => {
+                // Use 0.25 for a 25% duty cycle (maps to 0.625 internally)
+                OscillatorWrapper::Pulse(PulseOscillator::new(frequency, sample_rate, 0.25))
+            }
+            OscillatorType::PulseLFO => {
+                // Create an LFO at 0.5 Hz to modulate the pulse width
+                let lfo = SineOscillator::new(0.5, sample_rate);
+                OscillatorWrapper::PulseLFO(PulseOscillator::new(frequency, sample_rate, lfo))
+            }
         }
     }
 }
@@ -72,6 +96,8 @@ impl Signal for OscillatorWrapper {
             OscillatorWrapper::Triangle(osc) => osc.next_sample(),
             OscillatorWrapper::Sawtooth(osc) => osc.next_sample(),
             OscillatorWrapper::Square(osc) => osc.next_sample(),
+            OscillatorWrapper::Pulse(osc) => osc.next_sample(),
+            OscillatorWrapper::PulseLFO(osc) => osc.next_sample(),
         }
     }
 }
@@ -192,7 +218,7 @@ fn main() -> Result<()> {
             return Err(anyhow::anyhow!(
                 "Unsupported sample format: {}",
                 sample_format
-            ))
+            ));
         }
     };
 
