@@ -1,0 +1,15 @@
+//! Oscillator implementations for audio synthesis.
+//!
+//! This module contains the core `Oscillator` trait and various oscillator implementations.
+
+mod sawtooth;
+mod sine;
+mod square;
+mod traits;
+mod triangle;
+
+pub use sawtooth::SawtoothOscillator;
+pub use sine::SineOscillator;
+pub use square::SquareOscillator;
+pub use traits::Oscillator;
+pub use triangle::TriangleOscillator;
