@@ -1,6 +1,6 @@
 //! Sine wave oscillator implementation.
 
-use super::Oscillator;
+use super::{AudioSignal, Oscillator};
 use crate::Signal;
 use std::f64::consts::PI;
 
@@ -59,6 +59,12 @@ impl Signal for SineOscillator {
     }
 
     // Uses default implementation of process() from the trait
+}
+
+impl AudioSignal for SineOscillator {
+    fn sample_rate(&self) -> f64 {
+        self.sample_rate
+    }
 }
 
 impl Oscillator for SineOscillator {

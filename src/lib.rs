@@ -7,6 +7,7 @@ pub mod oscillators;
 
 // Re-export commonly used types at the crate root
 pub use oscillators::{
-    Oscillator, SawtoothOscillator, SineOscillator, SquareOscillator, TriangleOscillator,
+    AudioSignal, Oscillator, SawtoothOscillator, SineOscillator, SquareOscillator,
+    TriangleOscillator,
 };
 pub use signal::Signal;

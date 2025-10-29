@@ -11,5 +11,5 @@ mod triangle;
 pub use sawtooth::SawtoothOscillator;
 pub use sine::SineOscillator;
 pub use square::SquareOscillator;
-pub use traits::Oscillator;
+pub use traits::{AudioSignal, Oscillator};
 pub use triangle::TriangleOscillator;

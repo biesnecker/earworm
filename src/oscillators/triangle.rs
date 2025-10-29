@@ -1,6 +1,6 @@
 //! Triangle wave oscillator implementation.
 
-use super::Oscillator;
+use super::{AudioSignal, Oscillator};
 use crate::Signal;
 
 /// A triangle wave oscillator for audio synthesis.
@@ -66,6 +66,12 @@ impl Signal for TriangleOscillator {
     }
 
     // Uses default implementation of process() from the trait
+}
+
+impl AudioSignal for TriangleOscillator {
+    fn sample_rate(&self) -> f64 {
+        self.sample_rate
+    }
 }
 
 impl Oscillator for TriangleOscillator {

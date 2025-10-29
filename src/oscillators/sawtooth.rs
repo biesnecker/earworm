@@ -1,6 +1,6 @@
 //! Sawtooth wave oscillator implementation.
 
-use super::Oscillator;
+use super::{AudioSignal, Oscillator};
 use crate::Signal;
 
 /// A sawtooth wave oscillator for audio synthesis.
@@ -60,6 +60,12 @@ impl Signal for SawtoothOscillator {
     }
 
     // Uses default implementation of process() from the trait
+}
+
+impl AudioSignal for SawtoothOscillator {
+    fn sample_rate(&self) -> f64 {
+        self.sample_rate
+    }
 }
 
 impl Oscillator for SawtoothOscillator {
