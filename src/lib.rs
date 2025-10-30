@@ -3,6 +3,7 @@
 //! This library provides oscillators and other building blocks for audio synthesis.
 
 pub mod combinators;
+pub mod effects;
 pub mod envelopes;
 pub mod filters;
 pub mod noise;
@@ -14,6 +15,7 @@ pub use combinators::{
     Abs, Add, Clamp, Crossfade, Gain, Gate, Invert, Map, Max, Min, Mix, Multiply, Offset,
     SignalExt,
 };
+pub use effects::Delay;
 pub use envelopes::{Curve, ADSR};
 pub use filters::{BiquadFilter, FilterType};
 pub use noise::{PinkNoise, WhiteNoise};
