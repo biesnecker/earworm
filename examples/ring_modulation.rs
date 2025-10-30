@@ -11,14 +11,16 @@ use anyhow::Result;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample, SampleFormat, StreamConfig};
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEvent},
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
+    event::{self, Event, KeyCode, KeyEvent},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use earworm::{Signal, SignalExt, SineOscillator};
-use std::io::{stdout, Write};
-use std::sync::{Arc, Mutex};
+use std::io::{Write, stdout};
 use std::panic;
+use std::sync::{Arc, Mutex};
+
+const SAMPLE_RATE: u32 = 44100;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ModulationType {
@@ -67,7 +69,7 @@ struct AudioState {
 impl AudioState {
     fn new(carrier_freq: f64, sample_rate: f64) -> Self {
         let mod_type = ModulationType::None;
-        let signal = Self::create_signal(mod_type, carrier_freq, sample_rate);
+        let signal = Self::create_signal(mod_type, carrier_freq);
         Self {
             carrier_freq,
             sample_rate,
@@ -77,12 +79,8 @@ impl AudioState {
         }
     }
 
-    fn create_signal(
-        mod_type: ModulationType,
-        carrier_freq: f64,
-        sample_rate: f64,
-    ) -> Box<dyn Signal + Send> {
-        let carrier = SineOscillator::new(carrier_freq, sample_rate);
+    fn create_signal(mod_type: ModulationType, carrier_freq: f64) -> Box<dyn Signal + Send> {
+        let carrier = SineOscillator::<SAMPLE_RATE>::new(carrier_freq);
 
         match mod_type {
             ModulationType::None => {
@@ -93,26 +91,22 @@ impl AudioState {
                 // Amplitude modulation with a slow LFO
                 // LFO output is -1 to 1, so we offset it to 0 to 2, then multiply by 0.5
                 // to get 0 to 1 range for smooth tremolo
-                let lfo = SineOscillator::new(6.0, sample_rate);
-                Box::new(
-                    carrier
-                        .multiply(lfo.offset(1.0).gain(0.5))
-                        .gain(0.3),
-                )
+                let lfo = SineOscillator::<SAMPLE_RATE>::new(6.0);
+                Box::new(carrier.multiply(lfo.offset(1.0).gain(0.5)).gain(0.3))
             }
             ModulationType::RingLow => {
                 // Ring modulation with a low frequency creates a warbling effect
-                let modulator = SineOscillator::new(30.0, sample_rate);
+                let modulator = SineOscillator::<SAMPLE_RATE>::new(30.0);
                 Box::new(carrier.multiply(modulator).gain(0.3))
             }
             ModulationType::RingHarmonic => {
                 // Ring modulation with a harmonic frequency (3:2 ratio creates a musical fifth)
-                let modulator = SineOscillator::new(carrier_freq * 1.5, sample_rate);
+                let modulator = SineOscillator::<SAMPLE_RATE>::new(carrier_freq * 1.5);
                 Box::new(carrier.multiply(modulator).gain(0.3))
             }
             ModulationType::RingInharmonic => {
                 // Ring modulation with an inharmonic frequency creates dissonant metallic tones
-                let modulator = SineOscillator::new(573.0, sample_rate);
+                let modulator = SineOscillator::<SAMPLE_RATE>::new(573.0);
                 Box::new(carrier.multiply(modulator).gain(0.3))
             }
         }
@@ -120,7 +114,7 @@ impl AudioState {
 
     fn switch_modulation(&mut self) {
         self.mod_type = self.mod_type.next();
-        self.signal = Self::create_signal(self.mod_type, self.carrier_freq, self.sample_rate);
+        self.signal = Self::create_signal(self.mod_type, self.carrier_freq);
         // Add a brief fade-in to avoid clicks (2ms)
         self.fade_samples = (self.sample_rate * 0.002) as usize;
     }
@@ -236,19 +230,19 @@ fn main() -> Result<()> {
 
     // Event loop
     loop {
-        if event::poll(std::time::Duration::from_millis(100))? {
-            if let Event::Key(KeyEvent { code, .. }) = event::read()? {
-                match code {
-                    KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => break,
-                    KeyCode::Char(' ') => {
-                        let mut state = state.lock().unwrap();
-                        state.switch_modulation();
-                        let mod_type = state.mod_type;
-                        drop(state);
-                        draw_ui(mod_type)?;
-                    }
-                    _ => {}
+        if event::poll(std::time::Duration::from_millis(100))?
+            && let Event::Key(KeyEvent { code, .. }) = event::read()?
+        {
+            match code {
+                KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => break,
+                KeyCode::Char(' ') => {
+                    let mut state = state.lock().unwrap();
+                    state.switch_modulation();
+                    let mod_type = state.mod_type;
+                    drop(state);
+                    draw_ui(mod_type)?;
                 }
+                _ => {}
             }
         }
     }

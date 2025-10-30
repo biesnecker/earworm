@@ -16,8 +16,8 @@ use earworm::{
     TriangleOscillator,
 };
 use std::io::{Write, stdout};
-use std::sync::{Arc, Mutex};
 use std::panic;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum OscillatorType {
@@ -53,46 +53,38 @@ impl OscillatorType {
     }
 }
 
+const SAMPLE_RATE: u32 = 44100;
+
 enum OscillatorWrapper {
-    Sine(SineOscillator),
-    Triangle(TriangleOscillator),
-    Sawtooth(SawtoothOscillator),
-    Square(SquareOscillator),
-    Pulse(PulseOscillator),
-    PulseLFO(PulseOscillator),
+    Sine(SineOscillator<SAMPLE_RATE>),
+    Triangle(TriangleOscillator<SAMPLE_RATE>),
+    Sawtooth(SawtoothOscillator<SAMPLE_RATE>),
+    Square(SquareOscillator<SAMPLE_RATE>),
+    Pulse(PulseOscillator<SAMPLE_RATE>),
+    PulseLFO(PulseOscillator<SAMPLE_RATE>),
 }
 
 impl OscillatorWrapper {
-    fn new(osc_type: OscillatorType, frequency: f64, sample_rate: f64) -> Self {
+    fn new(osc_type: OscillatorType, frequency: f64) -> Self {
         match osc_type {
             OscillatorType::Sine => {
-                OscillatorWrapper::Sine(SineOscillator::new(frequency, sample_rate))
+                OscillatorWrapper::Sine(SineOscillator::<SAMPLE_RATE>::new(frequency))
             }
             OscillatorType::Triangle => {
-                OscillatorWrapper::Triangle(TriangleOscillator::new(frequency, sample_rate))
+                OscillatorWrapper::Triangle(TriangleOscillator::new(frequency))
             }
             OscillatorType::Sawtooth => {
-                OscillatorWrapper::Sawtooth(SawtoothOscillator::new(frequency, sample_rate))
+                OscillatorWrapper::Sawtooth(SawtoothOscillator::new(frequency))
             }
-            OscillatorType::Square => {
-                OscillatorWrapper::Square(SquareOscillator::new(frequency, sample_rate))
-            }
+            OscillatorType::Square => OscillatorWrapper::Square(SquareOscillator::new(frequency)),
             OscillatorType::Pulse => {
                 // Use 0.25 for a 25% duty cycle (maps to 0.625 internally)
-                OscillatorWrapper::Pulse(PulseOscillator::new(
-                    frequency,
-                    sample_rate,
-                    0.25.into(),
-                ))
+                OscillatorWrapper::Pulse(PulseOscillator::new(frequency, 0.25.into()))
             }
             OscillatorType::PulseLFO => {
                 // Create an LFO at 0.5 Hz to modulate the pulse width
-                let lfo = SineOscillator::new(0.5, sample_rate);
-                OscillatorWrapper::PulseLFO(PulseOscillator::new(
-                    frequency,
-                    sample_rate,
-                    lfo.into(),
-                ))
+                let lfo = SineOscillator::<SAMPLE_RATE>::new(0.5);
+                OscillatorWrapper::PulseLFO(PulseOscillator::new(frequency, lfo.into()))
             }
         }
     }
@@ -115,28 +107,26 @@ struct AudioState {
     oscillator: OscillatorWrapper,
     osc_type: OscillatorType,
     frequency: f64,
-    sample_rate: f64,
     /// Fade-in counter to avoid clicks when switching
     fade_samples: usize,
 }
 
 impl AudioState {
-    fn new(frequency: f64, sample_rate: f64) -> Self {
+    fn new(frequency: f64) -> Self {
         let osc_type = OscillatorType::Sine;
         Self {
-            oscillator: OscillatorWrapper::new(osc_type, frequency, sample_rate),
+            oscillator: OscillatorWrapper::new(osc_type, frequency),
             osc_type,
             frequency,
-            sample_rate,
             fade_samples: 0,
         }
     }
 
     fn switch_oscillator(&mut self) {
         self.osc_type = self.osc_type.next();
-        self.oscillator = OscillatorWrapper::new(self.osc_type, self.frequency, self.sample_rate);
+        self.oscillator = OscillatorWrapper::new(self.osc_type, self.frequency);
         // Add a brief fade-in to avoid clicks (2ms at 44100 Hz = ~88 samples)
-        self.fade_samples = (self.sample_rate * 0.002) as usize;
+        self.fade_samples = (SAMPLE_RATE as f64 * 0.002) as usize;
     }
 
     fn next_sample(&mut self) -> f64 {
@@ -144,7 +134,7 @@ impl AudioState {
 
         // Apply fade-in if we just switched
         if self.fade_samples > 0 {
-            let fade_start = (self.sample_rate * 0.002) as usize;
+            let fade_start = (SAMPLE_RATE as f64 * 0.002) as usize;
             let fade_progress = 1.0 - (self.fade_samples as f64 / fade_start as f64);
             self.fade_samples -= 1;
             sample * fade_progress
@@ -221,9 +211,8 @@ fn main() -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("No output device available"))?;
 
     let config = device.default_output_config()?;
-    let sample_rate = config.sample_rate().0 as f64;
 
-    let state = Arc::new(Mutex::new(AudioState::new(frequency, sample_rate)));
+    let state = Arc::new(Mutex::new(AudioState::new(frequency)));
 
     // Start audio stream
     let _stream = match config.sample_format() {
@@ -255,19 +244,19 @@ fn main() -> Result<()> {
 
     // Event loop
     loop {
-        if event::poll(std::time::Duration::from_millis(100))? {
-            if let Event::Key(KeyEvent { code, .. }) = event::read()? {
-                match code {
-                    KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => break,
-                    KeyCode::Char(' ') => {
-                        let mut state = state.lock().unwrap();
-                        state.switch_oscillator();
-                        let osc_type = state.osc_type;
-                        drop(state);
-                        draw_ui(osc_type, frequency)?;
-                    }
-                    _ => {}
+        if event::poll(std::time::Duration::from_millis(100))?
+            && let Event::Key(KeyEvent { code, .. }) = event::read()?
+        {
+            match code {
+                KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => break,
+                KeyCode::Char(' ') => {
+                    let mut state = state.lock().unwrap();
+                    state.switch_oscillator();
+                    let osc_type = state.osc_type;
+                    drop(state);
+                    draw_ui(osc_type, frequency)?;
                 }
+                _ => {}
             }
         }
     }

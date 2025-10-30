@@ -7,12 +7,12 @@ use anyhow::Result;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample, SampleFormat, StreamConfig};
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEvent},
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
+    event::{self, Event, KeyCode, KeyEvent},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use earworm::{Delay, Gain, Gate, Signal, SignalExt, SineOscillator, SquareOscillator};
-use std::io::{stdout, Write};
+use std::io::{Write, stdout};
 use std::panic;
 use std::sync::{Arc, Mutex};
 
@@ -50,51 +50,42 @@ impl DelayType {
     }
 }
 
+const SAMPLE_RATE: u32 = 44100;
+
 enum DelayWrapper {
-    Slapback(Delay<Gate<Gain<SineOscillator>>>),
-    ShortEcho(Delay<Gate<Gain<SineOscillator>>>),
-    MediumEcho(Delay<Gate<Gain<SineOscillator>>>),
-    LongEcho(Delay<Gate<Gain<SineOscillator>>>),
-    ModulatedDelay(Delay<Gate<Gain<SineOscillator>>>),
-    NoDry(Delay<Gate<Gain<SineOscillator>>>),
+    Slapback(Delay<SAMPLE_RATE, Gate<Gain<SineOscillator<SAMPLE_RATE>>>>),
+    ShortEcho(Delay<SAMPLE_RATE, Gate<Gain<SineOscillator<SAMPLE_RATE>>>>),
+    MediumEcho(Delay<SAMPLE_RATE, Gate<Gain<SineOscillator<SAMPLE_RATE>>>>),
+    LongEcho(Delay<SAMPLE_RATE, Gate<Gain<SineOscillator<SAMPLE_RATE>>>>),
+    ModulatedDelay(Delay<SAMPLE_RATE, Gate<Gain<SineOscillator<SAMPLE_RATE>>>>),
+    NoDry(Delay<SAMPLE_RATE, Gate<Gain<SineOscillator<SAMPLE_RATE>>>>),
 }
 
 impl DelayWrapper {
-    fn new(delay_type: DelayType, frequency: f64, sample_rate: f64) -> Self {
+    fn new(delay_type: DelayType, frequency: f64) -> Self {
         // Create a pulsed sine wave so we can hear distinct echoes
         // Gate opens when LFO > 0, creating rhythmic pulses
-        let sine = SineOscillator::new(frequency, sample_rate);
+        let sine = SineOscillator::new(frequency);
         let gained = sine.gain(0.5); // Reduce volume a bit
-        let lfo = SquareOscillator::new(2.0, sample_rate); // 2 Hz pulse rate
+        let lfo = SquareOscillator::<SAMPLE_RATE>::new(2.0); // 2 Hz pulse rate
         let source = gained.gate(lfo);
 
         match delay_type {
-            DelayType::Slapback => {
-                DelayWrapper::Slapback(Delay::slapback(source))
-            }
-            DelayType::ShortEcho => {
-                DelayWrapper::ShortEcho(Delay::echo(source, 0.2, 0.5))
-            }
-            DelayType::MediumEcho => {
-                DelayWrapper::MediumEcho(Delay::echo(source, 0.375, 0.6))
-            }
-            DelayType::LongEcho => {
-                DelayWrapper::LongEcho(Delay::echo(source, 0.5, 0.75))
-            }
+            DelayType::Slapback => DelayWrapper::Slapback(Delay::slapback(source)),
+            DelayType::ShortEcho => DelayWrapper::ShortEcho(Delay::echo(source, 0.2, 0.5)),
+            DelayType::MediumEcho => DelayWrapper::MediumEcho(Delay::echo(source, 0.375, 0.6)),
+            DelayType::LongEcho => DelayWrapper::LongEcho(Delay::echo(source, 0.5, 0.75)),
             DelayType::ModulatedDelay => {
                 // Create an LFO to modulate the delay time
-                let mod_lfo = SineOscillator::new(0.3, sample_rate);
+                let mod_lfo = SineOscillator::<SAMPLE_RATE>::new(0.3);
                 DelayWrapper::ModulatedDelay(Delay::new(
-                    source,
-                    0.6,     // max delay time
+                    source, 0.6,     // max delay time
                     mod_lfo, // modulated delay time
                     0.6,     // feedback
                     0.5,     // mix
                 ))
             }
-            DelayType::NoDry => {
-                DelayWrapper::NoDry(Delay::new(source, 0.5, 0.5, 0.6, 1.0))
-            }
+            DelayType::NoDry => DelayWrapper::NoDry(Delay::new(source, 0.5, 0.5, 0.6, 1.0)),
         }
     }
 }
@@ -116,28 +107,26 @@ struct AudioState {
     delay: DelayWrapper,
     delay_type: DelayType,
     frequency: f64,
-    sample_rate: f64,
     /// Fade-in counter to avoid clicks when switching
     fade_samples: usize,
 }
 
 impl AudioState {
-    fn new(frequency: f64, sample_rate: f64) -> Self {
+    fn new(frequency: f64) -> Self {
         let delay_type = DelayType::Slapback;
         Self {
-            delay: DelayWrapper::new(delay_type, frequency, sample_rate),
+            delay: DelayWrapper::new(delay_type, frequency),
             delay_type,
             frequency,
-            sample_rate,
             fade_samples: 0,
         }
     }
 
     fn switch_delay(&mut self) {
         self.delay_type = self.delay_type.next();
-        self.delay = DelayWrapper::new(self.delay_type, self.frequency, self.sample_rate);
+        self.delay = DelayWrapper::new(self.delay_type, self.frequency);
         // Add a brief fade-in to avoid clicks (10ms at 44100 Hz = ~441 samples)
-        self.fade_samples = (self.sample_rate * 0.01) as usize;
+        self.fade_samples = (SAMPLE_RATE as f64 * 0.01) as usize;
     }
 
     fn next_sample(&mut self) -> f64 {
@@ -145,7 +134,7 @@ impl AudioState {
 
         // Apply fade-in if we just switched
         if self.fade_samples > 0 {
-            let fade_start = (self.sample_rate * 0.01) as usize;
+            let fade_start = (SAMPLE_RATE as f64 * 0.01) as usize;
             let fade_progress = 1.0 - (self.fade_samples as f64 / fade_start as f64);
             self.fade_samples -= 1;
             sample * fade_progress
@@ -222,9 +211,8 @@ fn main() -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("No output device available"))?;
 
     let config = device.default_output_config()?;
-    let sample_rate = config.sample_rate().0 as f64;
 
-    let state = Arc::new(Mutex::new(AudioState::new(frequency, sample_rate)));
+    let state = Arc::new(Mutex::new(AudioState::new(frequency)));
 
     // Start audio stream
     let _stream = match config.sample_format() {
@@ -256,19 +244,19 @@ fn main() -> Result<()> {
 
     // Event loop
     loop {
-        if event::poll(std::time::Duration::from_millis(100))? {
-            if let Event::Key(KeyEvent { code, .. }) = event::read()? {
-                match code {
-                    KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => break,
-                    KeyCode::Char(' ') => {
-                        let mut state = state.lock().unwrap();
-                        state.switch_delay();
-                        let delay_type = state.delay_type;
-                        drop(state);
-                        draw_ui(delay_type, frequency)?;
-                    }
-                    _ => {}
+        if event::poll(std::time::Duration::from_millis(100))?
+            && let Event::Key(KeyEvent { code, .. }) = event::read()?
+        {
+            match code {
+                KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => break,
+                KeyCode::Char(' ') => {
+                    let mut state = state.lock().unwrap();
+                    state.switch_delay();
+                    let delay_type = state.delay_type;
+                    drop(state);
+                    draw_ui(delay_type, frequency)?;
                 }
+                _ => {}
             }
         }
     }

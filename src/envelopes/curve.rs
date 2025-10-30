@@ -8,9 +8,10 @@
 ///
 /// All curves map a normalized input value [0, 1] to a normalized output value [0, 1],
 /// allowing them to be used for any parameter range.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum Curve {
     /// Linear interpolation (constant rate of change)
+    #[default]
     Linear,
 
     /// Exponential curve (slow start, fast finish)
@@ -103,12 +104,6 @@ impl Curve {
 
         // Map to target range
         to_min + curved * (to_max - to_min)
-    }
-}
-
-impl Default for Curve {
-    fn default() -> Self {
-        Curve::Linear
     }
 }
 

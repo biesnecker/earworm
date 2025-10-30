@@ -1,13 +1,10 @@
 //! Core trait definitions for oscillators.
 
-use crate::AudioSignal;
-
 /// Common interface for all oscillators.
 ///
-/// This trait extends `AudioSignal` to add oscillator-specific functionality:
-/// frequency control and state management. All oscillators are audio signals,
-/// but provide additional capabilities for controlling their frequency.
-pub trait Oscillator: AudioSignal {
+/// This trait defines oscillator-specific functionality:
+/// frequency control and state management.
+pub trait Oscillator {
     /// Sets the frequency of the oscillator.
     ///
     /// # Arguments

@@ -22,6 +22,8 @@ use std::io::{Write, stdout};
 use std::panic;
 use std::sync::{Arc, Mutex};
 
+const SAMPLE_RATE: u32 = 44100;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ChordType {
     /// Major triad (root, major third, perfect fifth)
@@ -49,23 +51,21 @@ impl ChordType {
 }
 
 struct AudioState {
-    sample_rate: f64,
     chord_type: Option<ChordType>,
     signal: Box<dyn Signal + Send>,
     fade_samples: usize,
 }
 
 impl AudioState {
-    fn new(sample_rate: f64) -> Self {
+    fn new() -> Self {
         Self {
-            sample_rate,
             chord_type: None,
-            signal: Box::new(SineOscillator::new(0.0, sample_rate).gain(0.0)),
+            signal: Box::new(SineOscillator::<SAMPLE_RATE>::new(0.0).gain(0.0)),
             fade_samples: 0,
         }
     }
 
-    fn create_signal(chord_type: ChordType, sample_rate: f64) -> Box<dyn Signal + Send> {
+    fn create_signal(chord_type: ChordType) -> Box<dyn Signal + Send> {
         // Note frequencies (approximately)
         let c4 = 261.63; // Middle C
         let eb4 = 311.13; // E flat
@@ -79,52 +79,52 @@ impl AudioState {
             ChordType::Major => {
                 // Major triad using sine waves
                 Box::new(Mix3::new(
-                    SineOscillator::new(c4, sample_rate),
+                    SineOscillator::<SAMPLE_RATE>::new(c4),
                     0.33,
-                    SineOscillator::new(e4, sample_rate),
+                    SineOscillator::<SAMPLE_RATE>::new(e4),
                     0.33,
-                    SineOscillator::new(g4, sample_rate),
+                    SineOscillator::<SAMPLE_RATE>::new(g4),
                     0.33,
                 ))
             }
             ChordType::Minor => {
                 // Minor triad using triangle waves for a warmer sound
                 Box::new(Mix3::new(
-                    TriangleOscillator::new(c4, sample_rate),
+                    TriangleOscillator::<SAMPLE_RATE>::new(c4),
                     0.33,
-                    TriangleOscillator::new(eb4, sample_rate),
+                    TriangleOscillator::<SAMPLE_RATE>::new(eb4),
                     0.33,
-                    TriangleOscillator::new(g4, sample_rate),
+                    TriangleOscillator::<SAMPLE_RATE>::new(g4),
                     0.33,
                 ))
             }
             ChordType::Dominant7 => {
                 // Seventh chord using square waves for a bright sound
                 Box::new(Mix4::new(
-                    SquareOscillator::new(c4, sample_rate),
+                    SquareOscillator::<SAMPLE_RATE>::new(c4),
                     0.25,
-                    SquareOscillator::new(e4, sample_rate),
+                    SquareOscillator::<SAMPLE_RATE>::new(e4),
                     0.25,
-                    SquareOscillator::new(g4, sample_rate),
+                    SquareOscillator::<SAMPLE_RATE>::new(g4),
                     0.25,
-                    SquareOscillator::new(bb4, sample_rate),
+                    SquareOscillator::<SAMPLE_RATE>::new(bb4),
                     0.25,
                 ))
             }
             ChordType::Complex => {
                 // Complex chord mixing different waveform types
                 // Also demonstrates using the SignalExt trait for effects
-                let lfo = SineOscillator::new(2.0, sample_rate);
+                let lfo = SineOscillator::<SAMPLE_RATE>::new(2.0);
 
                 Box::new(
                     Mix4::new(
-                        SineOscillator::new(c4, sample_rate),
+                        SineOscillator::<SAMPLE_RATE>::new(c4),
                         0.25,
-                        TriangleOscillator::new(e4, sample_rate),
+                        TriangleOscillator::<SAMPLE_RATE>::new(e4),
                         0.25,
-                        SquareOscillator::new(g4, sample_rate),
+                        SquareOscillator::<SAMPLE_RATE>::new(g4),
                         0.20,
-                        SawtoothOscillator::new(c3, sample_rate),
+                        SawtoothOscillator::<SAMPLE_RATE>::new(c3),
                         0.15,
                     )
                     // Add a slow tremolo effect using the LFO
@@ -134,11 +134,11 @@ impl AudioState {
             ChordType::Octaves => {
                 // Same note across three octaves using sawtooth waves
                 Box::new(Mix3::new(
-                    SawtoothOscillator::new(c3, sample_rate),
+                    SawtoothOscillator::<SAMPLE_RATE>::new(c3),
                     0.40,
-                    SawtoothOscillator::new(c4, sample_rate),
+                    SawtoothOscillator::<SAMPLE_RATE>::new(c4),
                     0.35,
-                    SawtoothOscillator::new(c5, sample_rate),
+                    SawtoothOscillator::<SAMPLE_RATE>::new(c5),
                     0.25,
                 ))
             }
@@ -147,14 +147,14 @@ impl AudioState {
 
     fn play_chord(&mut self, chord_type: ChordType) {
         self.chord_type = Some(chord_type);
-        self.signal = Self::create_signal(chord_type, self.sample_rate);
+        self.signal = Self::create_signal(chord_type);
         // Add a brief fade-in to avoid clicks (5ms)
-        self.fade_samples = (self.sample_rate * 0.005) as usize;
+        self.fade_samples = (SAMPLE_RATE as f64 * 0.005) as usize;
     }
 
     fn stop(&mut self) {
         self.chord_type = None;
-        self.signal = Box::new(SineOscillator::new(0.0, self.sample_rate).gain(0.0));
+        self.signal = Box::new(SineOscillator::<SAMPLE_RATE>::new(0.0).gain(0.0));
     }
 
     fn next_sample(&mut self) -> f64 {
@@ -162,7 +162,7 @@ impl AudioState {
 
         // Apply fade-in if we just switched
         if self.fade_samples > 0 {
-            let fade_start = (self.sample_rate * 0.005) as usize;
+            let fade_start = (SAMPLE_RATE as f64 * 0.005) as usize;
             let fade_progress = 1.0 - (self.fade_samples as f64 / fade_start as f64);
             self.fade_samples -= 1;
             sample * fade_progress
@@ -243,9 +243,8 @@ fn main() -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("No output device available"))?;
 
     let config = device.default_output_config()?;
-    let sample_rate = config.sample_rate().0 as f64;
 
-    let state = Arc::new(Mutex::new(AudioState::new(sample_rate)));
+    let state = Arc::new(Mutex::new(AudioState::new()));
 
     // Start audio stream
     let _stream = match config.sample_format() {
@@ -277,53 +276,53 @@ fn main() -> Result<()> {
 
     // Event loop
     loop {
-        if event::poll(std::time::Duration::from_millis(100))? {
-            if let Event::Key(KeyEvent { code, .. }) = event::read()? {
-                match code {
-                    KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => break,
-                    KeyCode::Char('1') => {
-                        let mut state = state.lock().unwrap();
-                        state.play_chord(ChordType::Major);
-                        let chord_type = state.chord_type;
-                        drop(state);
-                        draw_ui(chord_type)?;
-                    }
-                    KeyCode::Char('2') => {
-                        let mut state = state.lock().unwrap();
-                        state.play_chord(ChordType::Minor);
-                        let chord_type = state.chord_type;
-                        drop(state);
-                        draw_ui(chord_type)?;
-                    }
-                    KeyCode::Char('3') => {
-                        let mut state = state.lock().unwrap();
-                        state.play_chord(ChordType::Dominant7);
-                        let chord_type = state.chord_type;
-                        drop(state);
-                        draw_ui(chord_type)?;
-                    }
-                    KeyCode::Char('4') => {
-                        let mut state = state.lock().unwrap();
-                        state.play_chord(ChordType::Complex);
-                        let chord_type = state.chord_type;
-                        drop(state);
-                        draw_ui(chord_type)?;
-                    }
-                    KeyCode::Char('5') => {
-                        let mut state = state.lock().unwrap();
-                        state.play_chord(ChordType::Octaves);
-                        let chord_type = state.chord_type;
-                        drop(state);
-                        draw_ui(chord_type)?;
-                    }
-                    KeyCode::Char('s') | KeyCode::Char('S') => {
-                        let mut state = state.lock().unwrap();
-                        state.stop();
-                        drop(state);
-                        draw_ui(None)?;
-                    }
-                    _ => {}
+        if event::poll(std::time::Duration::from_millis(100))?
+            && let Event::Key(KeyEvent { code, .. }) = event::read()?
+        {
+            match code {
+                KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => break,
+                KeyCode::Char('1') => {
+                    let mut state = state.lock().unwrap();
+                    state.play_chord(ChordType::Major);
+                    let chord_type = state.chord_type;
+                    drop(state);
+                    draw_ui(chord_type)?;
                 }
+                KeyCode::Char('2') => {
+                    let mut state = state.lock().unwrap();
+                    state.play_chord(ChordType::Minor);
+                    let chord_type = state.chord_type;
+                    drop(state);
+                    draw_ui(chord_type)?;
+                }
+                KeyCode::Char('3') => {
+                    let mut state = state.lock().unwrap();
+                    state.play_chord(ChordType::Dominant7);
+                    let chord_type = state.chord_type;
+                    drop(state);
+                    draw_ui(chord_type)?;
+                }
+                KeyCode::Char('4') => {
+                    let mut state = state.lock().unwrap();
+                    state.play_chord(ChordType::Complex);
+                    let chord_type = state.chord_type;
+                    drop(state);
+                    draw_ui(chord_type)?;
+                }
+                KeyCode::Char('5') => {
+                    let mut state = state.lock().unwrap();
+                    state.play_chord(ChordType::Octaves);
+                    let chord_type = state.chord_type;
+                    drop(state);
+                    draw_ui(chord_type)?;
+                }
+                KeyCode::Char('s') | KeyCode::Char('S') => {
+                    let mut state = state.lock().unwrap();
+                    state.stop();
+                    drop(state);
+                    draw_ui(None)?;
+                }
+                _ => {}
             }
         }
     }

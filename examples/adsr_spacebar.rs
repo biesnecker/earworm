@@ -9,32 +9,37 @@ use anyhow::Result;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample, SampleFormat, StreamConfig};
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEvent, KeyEventKind, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags, KeyboardEnhancementFlags},
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
+    event::{
+        self, Event, KeyCode, KeyEvent, KeyEventKind, KeyboardEnhancementFlags,
+        PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+    },
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use earworm::{Curve, Signal, SineOscillator, ADSR};
-use std::io::{stdout, Write};
-use std::sync::{Arc, Mutex};
+use earworm::{ADSR, Curve, Signal, SineOscillator};
+use std::io::{Write, stdout};
 use std::panic;
+use std::sync::{Arc, Mutex};
+
+const SAMPLE_RATE: u32 = 44100;
 
 /// Audio state containing both oscillator and envelope.
 struct AudioState {
-    oscillator: SineOscillator,
+    oscillator: SineOscillator<SAMPLE_RATE>,
     envelope: ADSR,
 }
 
 impl AudioState {
-    fn new(frequency: f64, sample_rate: f64) -> Self {
-        let oscillator = SineOscillator::new(frequency, sample_rate);
+    fn new(frequency: f64) -> Self {
+        let oscillator = SineOscillator::new(frequency);
 
         // Create ADSR with exponential curves for natural sound
         let envelope = ADSR::new(
-            0.05,  // 50ms attack
-            0.1,   // 100ms decay
-            0.7,   // 70% sustain level
-            0.3,   // 300ms release
-            sample_rate,
+            0.05, // 50ms attack
+            0.1,  // 100ms decay
+            0.7,  // 70% sustain level
+            0.3,  // 300ms release
+            SAMPLE_RATE as f64,
         )
         .with_attack_curve(Curve::Exponential(2.0))
         .with_decay_curve(Curve::Exponential(2.0))
@@ -133,15 +138,10 @@ fn main() -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("No output device available"))?;
 
     let config = device.default_output_config()?;
-    let sample_rate = config.sample_rate().0 as f64;
 
-    println!(
-        "Audio device: {} @ {} Hz",
-        device.name()?,
-        sample_rate
-    );
+    println!("Audio device: {} @ {} Hz", device.name()?, SAMPLE_RATE);
 
-    let state = Arc::new(Mutex::new(AudioState::new(frequency, sample_rate)));
+    let state = Arc::new(Mutex::new(AudioState::new(frequency)));
 
     // Start audio stream
     let _stream = match config.sample_format() {
@@ -159,7 +159,7 @@ fn main() -> Result<()> {
     // Setup terminal - ORDER MATTERS!
     // Must enable keyboard enhancement BEFORE entering alternate screen
     stdout().execute(PushKeyboardEnhancementFlags(
-        KeyboardEnhancementFlags::REPORT_EVENT_TYPES
+        KeyboardEnhancementFlags::REPORT_EVENT_TYPES,
     ))?;
 
     enable_raw_mode()?;
@@ -180,31 +180,31 @@ fn main() -> Result<()> {
 
     // Event loop
     loop {
-        if event::poll(std::time::Duration::from_millis(50))? {
-            if let Event::Key(KeyEvent { code, kind, .. }) = event::read()? {
-                match code {
-                    // Quit on Q or ESC
-                    KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => {
-                        if matches!(kind, KeyEventKind::Press) {
-                            break;
-                        }
+        if event::poll(std::time::Duration::from_millis(50))?
+            && let Event::Key(KeyEvent { code, kind, .. }) = event::read()?
+        {
+            match code {
+                // Quit on Q or ESC
+                KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => {
+                    if matches!(kind, KeyEventKind::Press) {
+                        break;
                     }
-
-                    // Spacebar - handle press/repeat/release
-                    KeyCode::Char(' ') => {
-                        if matches!(kind, KeyEventKind::Press | KeyEventKind::Repeat) {
-                            if !space_pressed {
-                                space_pressed = true;
-                                state.lock().unwrap().note_on();
-                            }
-                        } else if matches!(kind, KeyEventKind::Release) {
-                            space_pressed = false;
-                            state.lock().unwrap().note_off();
-                        }
-                    }
-
-                    _ => {}
                 }
+
+                // Spacebar - handle press/repeat/release
+                KeyCode::Char(' ') => {
+                    if matches!(kind, KeyEventKind::Press | KeyEventKind::Repeat) {
+                        if !space_pressed {
+                            space_pressed = true;
+                            state.lock().unwrap().note_on();
+                        }
+                    } else if matches!(kind, KeyEventKind::Release) {
+                        space_pressed = false;
+                        state.lock().unwrap().note_off();
+                    }
+                }
+
+                _ => {}
             }
         }
 

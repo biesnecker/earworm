@@ -1,12 +1,13 @@
 use earworm::{Signal, SignalExt, SineOscillator, SquareOscillator};
 
+const SAMPLE_RATE: u32 = 44100;
+
 fn main() {
-    let sample_rate = 44100.0;
     let frequency = 440.0;
 
     // Example 1: Clipping/Distortion
     println!("Example 1: Hard clipping distortion");
-    let mut distorted = SineOscillator::new(frequency, sample_rate)
+    let mut distorted = SineOscillator::<SAMPLE_RATE>::new(frequency)
         .gain(2.0) // Drive the signal hot
         .clamp(-0.5, 0.5); // Hard clip at ±0.5
 
@@ -17,8 +18,7 @@ fn main() {
 
     // Example 2: Waveshaping with map
     println!("Example 2: Cubic waveshaping");
-    let mut waveshaped = SineOscillator::new(frequency, sample_rate)
-        .map(|x| x * x * x); // Cubic distortion
+    let mut waveshaped = SineOscillator::<SAMPLE_RATE>::new(frequency).map(|x| x * x * x); // Cubic distortion
 
     for _ in 0..10 {
         print!("{:.3} ", waveshaped.next_sample());
@@ -27,8 +27,8 @@ fn main() {
 
     // Example 3: Crossfading between two oscillators
     println!("Example 3: Crossfading sine and square");
-    let sine = SineOscillator::new(frequency, sample_rate);
-    let square = SquareOscillator::new(frequency, sample_rate);
+    let sine = SineOscillator::<SAMPLE_RATE>::new(frequency);
+    let square = SquareOscillator::<SAMPLE_RATE>::new(frequency);
     let mut morphing = sine.crossfade(square, 0.5); // 50/50 mix
 
     for _ in 0..10 {
@@ -38,8 +38,8 @@ fn main() {
 
     // Example 4: Ring modulation with min/max
     println!("Example 4: Min of two oscillators");
-    let osc1 = SineOscillator::new(440.0, sample_rate);
-    let osc2 = SineOscillator::new(880.0, sample_rate);
+    let osc1 = SineOscillator::<SAMPLE_RATE>::new(440.0);
+    let osc2 = SineOscillator::<SAMPLE_RATE>::new(880.0);
     let mut min_signal = osc1.min(osc2);
 
     for _ in 0..10 {
@@ -49,7 +49,7 @@ fn main() {
 
     // Example 5: Full-wave rectification
     println!("Example 5: Rectified sine wave");
-    let mut rectified = SineOscillator::new(frequency, sample_rate).abs();
+    let mut rectified = SineOscillator::<SAMPLE_RATE>::new(frequency).abs();
 
     for _ in 0..10 {
         print!("{:.3} ", rectified.next_sample());
@@ -58,7 +58,7 @@ fn main() {
 
     // Example 6: Gated signal
     println!("Example 6: Noise gate effect");
-    let mut gated = SineOscillator::new(frequency, sample_rate)
+    let mut gated = SineOscillator::<SAMPLE_RATE>::new(frequency)
         .gain(0.5) // Quieter signal
         .gate(0.3); // Gate threshold at 0.3
 
@@ -69,8 +69,8 @@ fn main() {
 
     // Example 7: Complex chain
     println!("Example 7: Complex processing chain");
-    let osc = SineOscillator::new(frequency, sample_rate);
-    let modulator = SineOscillator::new(2.0, sample_rate);
+    let osc = SineOscillator::<SAMPLE_RATE>::new(frequency);
+    let modulator = SineOscillator::<SAMPLE_RATE>::new(2.0);
 
     let mut complex = osc
         .multiply(modulator) // Ring modulation

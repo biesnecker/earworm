@@ -1,7 +1,7 @@
 //! ADSR (Attack, Decay, Sustain, Release) envelope generator.
 
-use crate::Signal;
 use super::Curve;
+use crate::Signal;
 
 /// State of the ADSR envelope.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,14 +55,14 @@ enum EnvelopeState {
 /// ```
 pub struct ADSR {
     state: EnvelopeState,
-    phase_position: f64,  // samples elapsed in current phase
-    current_level: f64,   // current output level
+    phase_position: f64,      // samples elapsed in current phase
+    current_level: f64,       // current output level
     release_start_level: f64, // level when release was triggered
 
     // Time parameters (in seconds)
     attack_time: f64,
     decay_time: f64,
-    sustain_level: f64,   // 0.0 to 1.0
+    sustain_level: f64, // 0.0 to 1.0
     release_time: f64,
 
     // Curves for each phase
@@ -245,7 +245,7 @@ impl ADSR {
 
 impl Signal for ADSR {
     fn next_sample(&mut self) -> f64 {
-        let output = match self.state {
+        match self.state {
             EnvelopeState::Idle => 0.0,
 
             EnvelopeState::Attack => {
@@ -323,9 +323,7 @@ impl Signal for ADSR {
                     self.current_level
                 }
             }
-        };
-
-        output
+        }
     }
 }
 
@@ -548,8 +546,8 @@ mod tests {
 
     #[test]
     fn test_exponential_attack_curve() {
-        let mut env = ADSR::new(1.0, 0.0, 1.0, 0.0, SAMPLE_RATE)
-            .with_attack_curve(Curve::Exponential(2.0));
+        let mut env =
+            ADSR::new(1.0, 0.0, 1.0, 0.0, SAMPLE_RATE).with_attack_curve(Curve::Exponential(2.0));
         env.note_on();
 
         // At 50% progress, exponential(2.0) should give 0.25
@@ -562,8 +560,8 @@ mod tests {
 
     #[test]
     fn test_exponential_release_curve() {
-        let mut env = ADSR::new(0.0, 0.0, 1.0, 1.0, SAMPLE_RATE)
-            .with_release_curve(Curve::Exponential(2.0));
+        let mut env =
+            ADSR::new(0.0, 0.0, 1.0, 1.0, SAMPLE_RATE).with_release_curve(Curve::Exponential(2.0));
         env.note_on();
         env.next_sample();
         env.next_sample();
@@ -631,14 +629,14 @@ mod tests {
         // At 100Hz, 0.1s = 10 samples. The 11th sample triggers transition.
         for _ in 0..11 {
             let level = env.next_sample();
-            assert!(level >= 0.0 && level <= 1.0);
+            assert!((0.0..=1.0).contains(&level));
         }
         assert_eq!(env.state(), EnvelopeState::Decay);
 
         // Decay: 11 samples to complete
         for _ in 0..11 {
             let level = env.next_sample();
-            assert!(level >= 0.6 && level <= 1.0);
+            assert!((0.6..=1.0).contains(&level));
         }
         assert_eq!(env.state(), EnvelopeState::Sustain);
 
@@ -653,7 +651,7 @@ mod tests {
         // Release: 11 samples to complete
         for _ in 0..11 {
             let level = env.next_sample();
-            assert!(level >= 0.0 && level <= 0.6);
+            assert!((0.0..=0.6).contains(&level));
         }
 
         // Should be idle now
@@ -679,7 +677,7 @@ mod tests {
 
         // Verify all samples are in valid range
         for sample in buffer {
-            assert!(sample >= 0.0 && sample <= 1.0);
+            assert!((0.0..=1.0).contains(&sample));
         }
     }
 }

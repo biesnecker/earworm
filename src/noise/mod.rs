@@ -2,8 +2,8 @@
 //!
 //! This module contains various noise generator implementations.
 
-mod white;
 mod pink;
+mod white;
 
-pub use white::WhiteNoise;
 pub use pink::PinkNoise;
+pub use white::WhiteNoise;

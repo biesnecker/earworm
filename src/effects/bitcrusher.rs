@@ -7,7 +7,7 @@ use crate::signals::{AudioSignal, Param, Signal};
 /// Creates lo-fi digital degradation by simulating lower quality audio:
 /// - Sample rate reduction creates a "sample and hold" effect
 /// - Bit depth reduction creates quantization distortion
-pub struct Bitcrusher<S: AudioSignal> {
+pub struct Bitcrusher<const SAMPLE_RATE: u32, S: AudioSignal<SAMPLE_RATE>> {
     source: S,
     sample_rate_reduction: Param, // 1.0 = no reduction, 8.0 = 1/8 reduction
     bit_depth: Param,             // bits of resolution (e.g., 8.0 for 8-bit)
@@ -15,7 +15,7 @@ pub struct Bitcrusher<S: AudioSignal> {
     held_sample: f64,
 }
 
-impl<S: AudioSignal> Bitcrusher<S> {
+impl<const SAMPLE_RATE: u32, S: AudioSignal<SAMPLE_RATE>> Bitcrusher<SAMPLE_RATE, S> {
     /// Creates a new bitcrusher effect.
     ///
     /// # Arguments
@@ -38,7 +38,7 @@ impl<S: AudioSignal> Bitcrusher<S> {
     }
 }
 
-impl<S: AudioSignal> Signal for Bitcrusher<S> {
+impl<const SAMPLE_RATE: u32, S: AudioSignal<SAMPLE_RATE>> Signal for Bitcrusher<SAMPLE_RATE, S> {
     fn next_sample(&mut self) -> f64 {
         let current_sample = self.source.next_sample();
 
@@ -51,16 +51,13 @@ impl<S: AudioSignal> Signal for Bitcrusher<S> {
         self.hold_counter += 1.0;
 
         let levels = 2.0_f64.powf(self.bit_depth.value());
-        let quantized = (self.held_sample * levels).round() / levels;
-
-        return quantized;
+        (self.held_sample * levels).round() / levels
     }
 }
 
-impl<S: AudioSignal> AudioSignal for Bitcrusher<S> {
-    fn sample_rate(&self) -> f64 {
-        self.source.sample_rate()
-    }
+impl<const SAMPLE_RATE: u32, S: AudioSignal<SAMPLE_RATE>> AudioSignal<SAMPLE_RATE>
+    for Bitcrusher<SAMPLE_RATE, S>
+{
 }
 
 #[cfg(test)]
@@ -69,23 +66,18 @@ mod tests {
     use crate::combinators::SignalExt;
 
     // Helper to create a simple test signal
-    struct TestSignal {
+    struct TestSignal<const SAMPLE_RATE: u32> {
         values: Vec<f64>,
         index: usize,
-        sample_rate: f64,
     }
 
-    impl TestSignal {
-        fn new(values: Vec<f64>, sample_rate: f64) -> Self {
-            Self {
-                values,
-                index: 0,
-                sample_rate,
-            }
+    impl<const SAMPLE_RATE: u32> TestSignal<SAMPLE_RATE> {
+        fn new(values: Vec<f64>) -> Self {
+            Self { values, index: 0 }
         }
     }
 
-    impl Signal for TestSignal {
+    impl<const SAMPLE_RATE: u32> Signal for TestSignal<SAMPLE_RATE> {
         fn next_sample(&mut self) -> f64 {
             let value = self.values[self.index % self.values.len()];
             self.index += 1;
@@ -93,16 +85,12 @@ mod tests {
         }
     }
 
-    impl AudioSignal for TestSignal {
-        fn sample_rate(&self) -> f64 {
-            self.sample_rate
-        }
-    }
+    impl<const SAMPLE_RATE: u32> AudioSignal<SAMPLE_RATE> for TestSignal<SAMPLE_RATE> {}
 
     #[test]
     fn test_no_reduction() {
         // With sample_rate_reduction = 1.0, every sample should pass through
-        let signal = TestSignal::new(vec![0.1, 0.2, 0.3, 0.4], 44100.0);
+        let signal = TestSignal::<44100>::new(vec![0.1, 0.2, 0.3, 0.4]);
         let mut crusher = Bitcrusher::new(signal, 1.0, 16.0);
 
         assert!((crusher.next_sample() - 0.1).abs() < 0.001);
@@ -114,7 +102,7 @@ mod tests {
     #[test]
     fn test_sample_rate_reduction() {
         // With sample_rate_reduction = 2.0, every other sample should be held
-        let signal = TestSignal::new(vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6], 44100.0);
+        let signal = TestSignal::<44100>::new(vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6]);
         let mut crusher = Bitcrusher::new(signal, 2.0, 16.0);
 
         // First sample is grabbed and held
@@ -134,7 +122,7 @@ mod tests {
     #[test]
     fn test_sample_rate_reduction_3x() {
         // With sample_rate_reduction = 3.0, hold for 3 samples
-        let signal = TestSignal::new(vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7], 44100.0);
+        let signal = TestSignal::<44100>::new(vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]);
         let mut crusher = Bitcrusher::new(signal, 3.0, 16.0);
 
         let s1 = crusher.next_sample();
@@ -155,7 +143,7 @@ mod tests {
     #[test]
     fn test_bit_depth_reduction() {
         // Test quantization with low bit depth
-        let signal = TestSignal::new(vec![0.5], 44100.0);
+        let signal = TestSignal::<44100>::new(vec![0.5]);
         let mut crusher = Bitcrusher::new(signal, 1.0, 2.0); // 2-bit = 4 levels
 
         // With 2 bits, we have 4 levels: 0.0, 0.25, 0.5, 0.75, 1.0
@@ -167,7 +155,7 @@ mod tests {
     #[test]
     fn test_bit_depth_quantization_levels() {
         // Test that 8-bit gives 256 levels
-        let signal = TestSignal::new(vec![0.123456], 44100.0);
+        let signal = TestSignal::<44100>::new(vec![0.123456]);
         let mut crusher = Bitcrusher::new(signal, 1.0, 8.0);
 
         let sample = crusher.next_sample();
@@ -180,7 +168,7 @@ mod tests {
     #[test]
     fn test_severe_bit_crushing() {
         // Test very low bit depth (1 bit = 2 levels: 0 or 1)
-        let signal = TestSignal::new(vec![0.3, -0.3], 44100.0);
+        let signal = TestSignal::<44100>::new(vec![0.3, -0.3]);
         let mut crusher = Bitcrusher::new(signal, 1.0, 1.0);
 
         let sample1 = crusher.next_sample();
@@ -194,7 +182,7 @@ mod tests {
     #[test]
     fn test_combined_effects() {
         // Test both sample rate reduction and bit depth reduction together
-        let signal = TestSignal::new(vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6], 44100.0);
+        let signal = TestSignal::<44100>::new(vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6]);
         let mut crusher = Bitcrusher::new(signal, 2.0, 4.0); // 2x rate reduction, 4-bit
 
         let sample1 = crusher.next_sample();
@@ -212,7 +200,7 @@ mod tests {
     #[test]
     fn test_sample_rate_reduction_clamp_below_one() {
         // Test that sample_rate_reduction < 1.0 behaves like 1.0
-        let signal = TestSignal::new(vec![0.1, 0.2, 0.3, 0.4], 44100.0);
+        let signal = TestSignal::<44100>::new(vec![0.1, 0.2, 0.3, 0.4]);
         let mut crusher = Bitcrusher::new(signal, 0.5, 16.0); // Invalid value < 1.0
 
         // Should behave like no reduction (every sample passes through)
@@ -224,7 +212,7 @@ mod tests {
 
     #[test]
     fn test_audio_signal_trait() {
-        let signal = TestSignal::new(vec![0.5], 48000.0);
+        let signal = TestSignal::<48000>::new(vec![0.5]);
         let crusher = Bitcrusher::new(signal, 2.0, 8.0);
 
         assert_eq!(crusher.sample_rate(), 48000.0);
@@ -235,8 +223,8 @@ mod tests {
         // Test that Param can be used for modulation
         use crate::SineOscillator;
 
-        let signal = TestSignal::new(vec![0.5; 100], 44100.0);
-        let lfo = SineOscillator::new(1.0, 44100.0);
+        let signal = TestSignal::<44100>::new(vec![0.5; 100]);
+        let lfo = SineOscillator::<44100>::new(1.0);
 
         // This should compile and run without panicking
         let mut crusher = Bitcrusher::new(signal, Param::modulated(lfo.gain(2.0).offset(3.0)), 8.0);

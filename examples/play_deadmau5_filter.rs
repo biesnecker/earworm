@@ -9,41 +9,45 @@ use anyhow::Result;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample, SampleFormat, StreamConfig};
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEvent},
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
+    event::{self, Event, KeyCode, KeyEvent},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use earworm::{AudioSignalExt, BiquadFilter, Signal, SignalExt, SawtoothOscillator, SquareOscillator};
-use std::io::{stdout, Write};
+use earworm::{
+    AudioSignalExt, BiquadFilter, SawtoothOscillator, Signal, SignalExt, SquareOscillator,
+};
+use std::io::{Write, stdout};
 use std::panic;
 use std::sync::{Arc, Mutex};
 
+const SAMPLE_RATE: u32 = 44100;
+
 /// The pulsing filter signal that creates the deadmau5 effect
 struct DeadmauFilter {
-    filter: BiquadFilter<SawtoothOscillator>,
+    filter: BiquadFilter<SAMPLE_RATE, SawtoothOscillator<SAMPLE_RATE>>,
 }
 
 impl DeadmauFilter {
-    fn new(sample_rate: f64) -> Self {
+    fn new() -> Self {
         // Base frequency for the sawtooth (nice thick sound for this effect)
         let base_freq = 110.0; // A2
 
         // Create a sawtooth oscillator for rich harmonic content
-        let osc = SawtoothOscillator::new(base_freq, sample_rate);
+        let osc = SawtoothOscillator::new(base_freq);
 
         // At 120 BPM, 8th notes occur at 4 Hz (120 BPM / 60 * 2 beats per half note / 4 eighth notes)
         let pulse_rate = 4.0; // Hz
 
         // Create a square wave LFO for the sharp on/off pulsing effect
-        let lfo = SquareOscillator::new(pulse_rate, sample_rate);
+        let lfo = SquareOscillator::<SAMPLE_RATE>::new(pulse_rate);
 
         // Map the square wave (-1 to 1) to cutoff frequency
         // When LFO is high (1): cutoff at ~4000Hz (open filter)
         // When LFO is low (-1): cutoff at ~50Hz (closed filter, dark)
         // This creates the dramatic "drop" effect
         let modulated_cutoff = lfo
-            .gain(1975.0)      // Scale: 2000Hz range
-            .offset(2025.0);   // Offset: centered at 2025Hz (50Hz to 4000Hz)
+            .gain(1975.0) // Scale: 2000Hz range
+            .offset(2025.0); // Offset: centered at 2025Hz (50Hz to 4000Hz)
 
         // Use moderate Q for some resonance at the cutoff
         let q = 2.0;
@@ -124,9 +128,8 @@ fn main() -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("No output device available"))?;
 
     let config = device.default_output_config()?;
-    let sample_rate = config.sample_rate().0 as f64;
 
-    let state = Arc::new(Mutex::new(DeadmauFilter::new(sample_rate)));
+    let state = Arc::new(Mutex::new(DeadmauFilter::new()));
 
     // Start audio stream
     let _stream = match config.sample_format() {
@@ -137,7 +140,7 @@ fn main() -> Result<()> {
             return Err(anyhow::anyhow!(
                 "Unsupported sample format: {}",
                 sample_format
-            ))
+            ));
         }
     };
 
@@ -158,12 +161,12 @@ fn main() -> Result<()> {
 
     // Event loop
     loop {
-        if event::poll(std::time::Duration::from_millis(100))? {
-            if let Event::Key(KeyEvent { code, .. }) = event::read()? {
-                match code {
-                    KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => break,
-                    _ => {}
-                }
+        if event::poll(std::time::Duration::from_millis(100))?
+            && let Event::Key(KeyEvent { code, .. }) = event::read()?
+        {
+            match code {
+                KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => break,
+                _ => {}
             }
         }
     }

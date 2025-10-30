@@ -45,13 +45,13 @@ pub trait Signal {
 /// ```
 /// use earworm::{ConstantSignal, Param};
 ///
-/// let constant = ConstantSignal(0.5);
+/// let constant = ConstantSignal::<44100>(0.5);
 /// let param: Param = constant.into();
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ConstantSignal(pub f64);
+pub struct ConstantSignal<const SAMPLE_RATE: u32>(pub f64);
 
-impl Signal for ConstantSignal {
+impl<const SAMPLE_RATE: u32> Signal for ConstantSignal<SAMPLE_RATE> {
     fn next_sample(&mut self) -> f64 {
         self.0
     }
@@ -61,11 +61,13 @@ impl Signal for ConstantSignal {
     }
 }
 
-impl From<f64> for ConstantSignal {
+impl<const SAMPLE_RATE: u32> From<f64> for ConstantSignal<SAMPLE_RATE> {
     fn from(value: f64) -> Self {
-        ConstantSignal(value)
+        ConstantSignal::<SAMPLE_RATE>(value)
     }
 }
+
+impl<const SAMPLE_RATE: u32> crate::AudioSignal<SAMPLE_RATE> for ConstantSignal<SAMPLE_RATE> {}
 
 /// A parameter that can be either a fixed value or modulated by a signal.
 ///
@@ -146,7 +148,7 @@ impl Param {
     /// ```
     /// use earworm::{Param, SineOscillator};
     ///
-    /// let lfo = SineOscillator::new(1.0, 44100.0);
+    /// let lfo = SineOscillator::<44100>::new(1.0);
     /// let param = Param::modulated(lfo);
     /// ```
     pub fn modulated(signal: impl Signal + Send + 'static) -> Self {
@@ -176,7 +178,7 @@ mod tests {
 
     #[test]
     fn test_f64_to_constant_signal() {
-        let constant: ConstantSignal = 0.5.into();
+        let constant: ConstantSignal<44100> = 0.5.into();
         assert_eq!(constant.0, 0.5);
     }
 
@@ -192,7 +194,7 @@ mod tests {
     #[test]
     fn test_signal_to_param() {
         use crate::SineOscillator;
-        let lfo = SineOscillator::new(1.0, 44100.0);
+        let lfo = SineOscillator::<44100>::new(1.0);
         let param: Param = lfo.into();
         match param {
             Param::Fixed(_) => panic!("Expected Signal, got Fixed"),
@@ -204,7 +206,7 @@ mod tests {
     fn test_constant_signal_to_param() {
         // ConstantSignal converts to Param::Signal (can't specialize without nightly)
         // For efficient Param::Fixed, use f64.into() directly
-        let constant = ConstantSignal(0.75);
+        let constant = ConstantSignal::<44100>(0.75);
         let param: Param = constant.into();
         match param {
             Param::Signal(_) => {} // Success - ConstantSignal is a Signal

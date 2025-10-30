@@ -16,11 +16,11 @@ pub use combinators::{
     Offset, SignalExt,
 };
 pub use effects::Delay;
-pub use envelopes::{Curve, ADSR};
+pub use envelopes::{ADSR, Curve};
 pub use filters::{BiquadFilter, FilterType};
 pub use noise::{PinkNoise, WhiteNoise};
 pub use oscillators::{
-    Oscillator, PulseOscillator, SawtoothOscillator, SineOscillator,
-    SquareOscillator, TriangleOscillator,
+    Oscillator, PulseOscillator, SawtoothOscillator, SineOscillator, SquareOscillator,
+    TriangleOscillator,
 };
 pub use signals::{AudioSignal, AudioSignalExt, ConstantSignal, Param, Signal};

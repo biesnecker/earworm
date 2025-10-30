@@ -7,26 +7,30 @@ use anyhow::Result;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample, SampleFormat, StreamConfig};
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEvent},
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
+    event::{self, Event, KeyCode, KeyEvent},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use earworm::{AudioSignalExt, BiquadFilter, Signal, SignalExt, SineOscillator, TriangleOscillator};
-use std::io::{stdout, Write};
+use earworm::{
+    AudioSignalExt, BiquadFilter, Signal, SignalExt, SineOscillator, TriangleOscillator,
+};
+use std::io::{Write, stdout};
 use std::panic;
 use std::sync::{Arc, Mutex};
+
+const SAMPLE_RATE: u32 = 44100;
 
 /// Different filter configurations to cycle through
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FilterMode {
-    Raw,                    // No filter
-    LowPass,                // Low-pass filter
-    HighPass,               // High-pass filter
-    BandPass,               // Band-pass filter
-    ResonantLowPass,        // Low-pass with high resonance
-    SweptLowPass,           // Low-pass with LFO modulation
-    ChainedFilters,         // Multiple filters in series
-    NotchFilter,            // Notch filter
+    Raw,             // No filter
+    LowPass,         // Low-pass filter
+    HighPass,        // High-pass filter
+    BandPass,        // Band-pass filter
+    ResonantLowPass, // Low-pass with high resonance
+    SweptLowPass,    // Low-pass with LFO modulation
+    ChainedFilters,  // Multiple filters in series
+    NotchFilter,     // Notch filter
 }
 
 impl FilterMode {
@@ -59,14 +63,16 @@ impl FilterMode {
 
 /// Enum to hold different filter types
 enum FilteredSignal {
-    Raw(TriangleOscillator),
-    LowPass(BiquadFilter<TriangleOscillator>),
-    HighPass(BiquadFilter<TriangleOscillator>),
-    BandPass(BiquadFilter<TriangleOscillator>),
-    ResonantLowPass(BiquadFilter<TriangleOscillator>),
-    SweptLowPass(BiquadFilter<TriangleOscillator>),
-    ChainedFilters(BiquadFilter<BiquadFilter<TriangleOscillator>>),
-    NotchFilter(BiquadFilter<TriangleOscillator>),
+    Raw(TriangleOscillator<SAMPLE_RATE>),
+    LowPass(BiquadFilter<SAMPLE_RATE, TriangleOscillator<SAMPLE_RATE>>),
+    HighPass(BiquadFilter<SAMPLE_RATE, TriangleOscillator<SAMPLE_RATE>>),
+    BandPass(BiquadFilter<SAMPLE_RATE, TriangleOscillator<SAMPLE_RATE>>),
+    ResonantLowPass(BiquadFilter<SAMPLE_RATE, TriangleOscillator<SAMPLE_RATE>>),
+    SweptLowPass(BiquadFilter<SAMPLE_RATE, TriangleOscillator<SAMPLE_RATE>>),
+    ChainedFilters(
+        BiquadFilter<SAMPLE_RATE, BiquadFilter<SAMPLE_RATE, TriangleOscillator<SAMPLE_RATE>>>,
+    ),
+    NotchFilter(BiquadFilter<SAMPLE_RATE, TriangleOscillator<SAMPLE_RATE>>),
 }
 
 impl Signal for FilteredSignal {
@@ -91,17 +97,15 @@ struct AudioState {
     signal: FilteredSignal,
     mode: FilterMode,
     base_frequency: f64,
-    sample_rate: f64,
 }
 
 impl AudioState {
-    fn new(base_frequency: f64, sample_rate: f64) -> Self {
-        let osc = TriangleOscillator::new(base_frequency, sample_rate);
+    fn new(base_frequency: f64) -> Self {
+        let osc = TriangleOscillator::new(base_frequency);
         Self {
             signal: FilteredSignal::Raw(osc),
             mode: FilterMode::Raw,
             base_frequency,
-            sample_rate,
         }
     }
 
@@ -110,40 +114,38 @@ impl AudioState {
 
         // Create new signal chain based on mode
         self.signal = match mode {
-            FilterMode::Raw => {
-                FilteredSignal::Raw(TriangleOscillator::new(self.base_frequency, self.sample_rate))
-            }
+            FilterMode::Raw => FilteredSignal::Raw(TriangleOscillator::new(self.base_frequency)),
 
             FilterMode::LowPass => {
-                let osc = TriangleOscillator::new(self.base_frequency, self.sample_rate);
+                let osc = TriangleOscillator::new(self.base_frequency);
                 FilteredSignal::LowPass(osc.lowpass_filter(800.0, 0.707))
             }
 
             FilterMode::HighPass => {
-                let osc = TriangleOscillator::new(self.base_frequency, self.sample_rate);
+                let osc = TriangleOscillator::new(self.base_frequency);
                 FilteredSignal::HighPass(osc.highpass_filter(600.0, 0.707))
             }
 
             FilterMode::BandPass => {
-                let osc = TriangleOscillator::new(self.base_frequency, self.sample_rate);
+                let osc = TriangleOscillator::new(self.base_frequency);
                 FilteredSignal::BandPass(osc.bandpass_filter(self.base_frequency, 5.0))
             }
 
             FilterMode::ResonantLowPass => {
-                let osc = TriangleOscillator::new(self.base_frequency, self.sample_rate);
+                let osc = TriangleOscillator::new(self.base_frequency);
                 FilteredSignal::ResonantLowPass(osc.lowpass_filter(500.0, 10.0))
             }
 
             FilterMode::SweptLowPass => {
-                let osc = TriangleOscillator::new(self.base_frequency, self.sample_rate);
-                let lfo = SineOscillator::new(0.5, self.sample_rate);
+                let osc = TriangleOscillator::new(self.base_frequency);
+                let lfo = SineOscillator::<SAMPLE_RATE>::new(0.5);
                 // LFO sweeps from 300Hz to 1500Hz
                 let modulated_cutoff = lfo.gain(600.0).offset(900.0);
                 FilteredSignal::SweptLowPass(osc.lowpass_filter(modulated_cutoff, 2.0))
             }
 
             FilterMode::ChainedFilters => {
-                let osc = TriangleOscillator::new(self.base_frequency, self.sample_rate);
+                let osc = TriangleOscillator::new(self.base_frequency);
                 let chained = osc
                     .highpass_filter(100.0, 0.707)
                     .lowpass_filter(1000.0, 0.707);
@@ -151,7 +153,7 @@ impl AudioState {
             }
 
             FilterMode::NotchFilter => {
-                let osc = TriangleOscillator::new(self.base_frequency, self.sample_rate);
+                let osc = TriangleOscillator::new(self.base_frequency);
                 FilteredSignal::NotchFilter(osc.notch_filter(self.base_frequency, 8.0))
             }
         };
@@ -201,11 +203,7 @@ fn draw_ui(mode: FilterMode) -> Result<()> {
     ))?;
     stdout.execute(crossterm::cursor::MoveTo(0, 0))?;
 
-    write!(
-        stdout,
-        "Filter: {} | SPACE=switch Q=quit",
-        mode.name()
-    )?;
+    write!(stdout, "Filter: {} | SPACE=switch Q=quit", mode.name())?;
 
     stdout.flush()?;
     Ok(())
@@ -228,9 +226,8 @@ fn main() -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("No output device available"))?;
 
     let config = device.default_output_config()?;
-    let sample_rate = config.sample_rate().0 as f64;
 
-    let state = Arc::new(Mutex::new(AudioState::new(frequency, sample_rate)));
+    let state = Arc::new(Mutex::new(AudioState::new(frequency)));
 
     // Start audio stream
     let _stream = match config.sample_format() {
@@ -241,7 +238,7 @@ fn main() -> Result<()> {
             return Err(anyhow::anyhow!(
                 "Unsupported sample format: {}",
                 sample_format
-            ))
+            ));
         }
     };
 
@@ -262,19 +259,19 @@ fn main() -> Result<()> {
 
     // Event loop
     loop {
-        if event::poll(std::time::Duration::from_millis(100))? {
-            if let Event::Key(KeyEvent { code, .. }) = event::read()? {
-                match code {
-                    KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => break,
-                    KeyCode::Char(' ') => {
-                        let mut s = state.lock().unwrap();
-                        let next_mode = s.mode.next();
-                        s.set_mode(next_mode);
-                        drop(s);
-                        draw_ui(next_mode)?;
-                    }
-                    _ => {}
+        if event::poll(std::time::Duration::from_millis(100))?
+            && let Event::Key(KeyEvent { code, .. }) = event::read()?
+        {
+            match code {
+                KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => break,
+                KeyCode::Char(' ') => {
+                    let mut s = state.lock().unwrap();
+                    let next_mode = s.mode.next();
+                    s.set_mode(next_mode);
+                    drop(s);
+                    draw_ui(next_mode)?;
                 }
+                _ => {}
             }
         }
     }

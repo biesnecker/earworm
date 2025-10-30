@@ -6,18 +6,18 @@ use crate::signals::{AudioSignal, Param, Signal};
 ///
 /// Stores input samples in a ring buffer and plays them back after a specified time.
 /// Feedback creates repeating echoes.
-pub struct Delay<S: AudioSignal> {
+pub struct Delay<const SAMPLE_RATE: u32, S: AudioSignal<SAMPLE_RATE>> {
     source: S,
     buffer: Vec<f64>,
     write_pos: usize,
 
     // Parameters
-    delay_time: Param,  // delay time in seconds
-    feedback: Param,    // 0.0 to ~0.95 (higher = more repeats, >1.0 = infinite/growing)
-    mix: Param,         // dry/wet mix, 0.0 = all dry, 1.0 = all wet
+    delay_time: Param, // delay time in seconds
+    feedback: Param,   // 0.0 to ~0.95 (higher = more repeats, >1.0 = infinite/growing)
+    mix: Param,        // dry/wet mix, 0.0 = all dry, 1.0 = all wet
 }
 
-impl<S: AudioSignal> Delay<S> {
+impl<const SAMPLE_RATE: u32, S: AudioSignal<SAMPLE_RATE>> Delay<SAMPLE_RATE, S> {
     /// Creates a new delay effect.
     ///
     /// # Arguments
@@ -34,8 +34,7 @@ impl<S: AudioSignal> Delay<S> {
         feedback: impl Into<Param>,
         mix: impl Into<Param>,
     ) -> Self {
-        let sample_rate = source.sample_rate();
-        let buffer_size = (max_delay_time * sample_rate).ceil() as usize + 1;
+        let buffer_size = (max_delay_time * SAMPLE_RATE as f64).ceil() as usize + 1;
 
         Self {
             source,
@@ -54,11 +53,7 @@ impl<S: AudioSignal> Delay<S> {
     /// * `source` - Input signal
     /// * `delay_time` - Time between echoes in seconds
     /// * `feedback` - Number of echoes (0.0-0.95)
-    pub fn echo(
-        source: S,
-        delay_time: f64,
-        feedback: f64,
-    ) -> Self {
+    pub fn echo(source: S, delay_time: f64, feedback: f64) -> Self {
         Self::new(source, delay_time, delay_time, feedback, 0.5)
     }
 
@@ -70,7 +65,7 @@ impl<S: AudioSignal> Delay<S> {
     }
 }
 
-impl<S: AudioSignal> Signal for Delay<S> {
+impl<const SAMPLE_RATE: u32, S: AudioSignal<SAMPLE_RATE>> Signal for Delay<SAMPLE_RATE, S> {
     fn next_sample(&mut self) -> f64 {
         let input = self.source.next_sample();
 
@@ -80,7 +75,7 @@ impl<S: AudioSignal> Signal for Delay<S> {
         let mix = self.mix.value().clamp(0.0, 1.0);
 
         // Calculate delay in samples
-        let delay_samples = (delay_time * self.source.sample_rate()) as usize;
+        let delay_samples = (delay_time * SAMPLE_RATE as f64) as usize;
         let delay_samples = delay_samples.min(self.buffer.len() - 1);
 
         // Calculate read position
@@ -100,8 +95,7 @@ impl<S: AudioSignal> Signal for Delay<S> {
     }
 }
 
-impl<S: AudioSignal> AudioSignal for Delay<S> {
-    fn sample_rate(&self) -> f64 {
-        self.source.sample_rate()
-    }
+impl<const SAMPLE_RATE: u32, S: AudioSignal<SAMPLE_RATE>> AudioSignal<SAMPLE_RATE>
+    for Delay<SAMPLE_RATE, S>
+{
 }

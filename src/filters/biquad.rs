@@ -5,7 +5,7 @@
 //! biquad difference equation. The implementation uses Robert Bristow-Johnson's
 //! Audio EQ Cookbook formulas for coefficient calculation.
 
-use crate::{Param, Signal};
+use crate::{AudioSignal, Param, Signal};
 
 /// The type of filter to apply.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,10 +36,10 @@ pub enum FilterType {
 /// ```
 /// use earworm::{SineOscillator, filters::BiquadFilter};
 ///
-/// let osc = SineOscillator::new(440.0, 44100.0);
-/// let mut filter = BiquadFilter::lowpass(osc, 1000.0, 0.707, 44100.0);
+/// let osc = SineOscillator::<44100>::new(440.0);
+/// let mut filter = BiquadFilter::lowpass(osc, 1000.0, 0.707);
 /// ```
-pub struct BiquadFilter<S: Signal> {
+pub struct BiquadFilter<const SAMPLE_RATE: u32, S: AudioSignal<SAMPLE_RATE>> {
     source: S,
     cutoff: Param,
     resonance: Param,
@@ -58,19 +58,16 @@ pub struct BiquadFilter<S: Signal> {
     a1: f64, // Feedback coefficient for y[n-1]
     a2: f64, // Feedback coefficient for y[n-2]
 
-    sample_rate: f64,
-
     // Optimization: only update coefficients if at least one param is modulated
     needs_coefficient_update: bool,
 }
 
-impl<S: Signal> BiquadFilter<S> {
+impl<const SAMPLE_RATE: u32, S: AudioSignal<SAMPLE_RATE>> BiquadFilter<SAMPLE_RATE, S> {
     pub fn new(
         source: S,
         cutoff: impl Into<Param>,
         resonance: impl Into<Param>,
         filter_type: FilterType,
-        sample_rate: f64,
     ) -> Self {
         let cutoff = cutoff.into();
         let resonance = resonance.into();
@@ -92,7 +89,6 @@ impl<S: Signal> BiquadFilter<S> {
             b2: 0.0,
             a1: 0.0,
             a2: 0.0,
-            sample_rate,
             needs_coefficient_update,
         };
 
@@ -111,10 +107,11 @@ impl<S: Signal> BiquadFilter<S> {
         let q = self.resonance.value().max(0.001); // Prevent division by zero
 
         // Clamp frequency to valid range (avoid nyquist issues)
-        let freq = freq.clamp(1.0, self.sample_rate * 0.49);
+        let sample_rate = SAMPLE_RATE as f64;
+        let freq = freq.clamp(1.0, sample_rate * 0.49);
 
         // Common calculations
-        let omega = 2.0 * PI * freq / self.sample_rate;
+        let omega = 2.0 * PI * freq / sample_rate;
         let sin_omega = omega.sin();
         let cos_omega = omega.cos();
         let alpha = sin_omega / (2.0 * q);
@@ -195,14 +192,8 @@ impl<S: Signal> BiquadFilter<S> {
     /// * `source` - Input signal
     /// * `cutoff` - Cutoff frequency in Hz
     /// * `q` - Q factor (resonance), typically 0.5-10.0. Higher = more resonant peak.
-    /// * `sample_rate` - Sample rate in Hz
-    pub fn lowpass(
-        source: S,
-        cutoff: impl Into<Param>,
-        q: impl Into<Param>,
-        sample_rate: f64,
-    ) -> Self {
-        Self::new(source, cutoff, q, FilterType::LowPass, sample_rate)
+    pub fn lowpass(source: S, cutoff: impl Into<Param>, q: impl Into<Param>) -> Self {
+        Self::new(source, cutoff, q, FilterType::LowPass)
     }
 
     /// Creates a high-pass filter.
@@ -212,14 +203,8 @@ impl<S: Signal> BiquadFilter<S> {
     /// * `source` - Input signal
     /// * `cutoff` - Cutoff frequency in Hz
     /// * `q` - Q factor (resonance), typically 0.5-10.0
-    /// * `sample_rate` - Sample rate in Hz
-    pub fn highpass(
-        source: S,
-        cutoff: impl Into<Param>,
-        q: impl Into<Param>,
-        sample_rate: f64,
-    ) -> Self {
-        Self::new(source, cutoff, q, FilterType::HighPass, sample_rate)
+    pub fn highpass(source: S, cutoff: impl Into<Param>, q: impl Into<Param>) -> Self {
+        Self::new(source, cutoff, q, FilterType::HighPass)
     }
 
     /// Creates a band-pass filter.
@@ -231,14 +216,8 @@ impl<S: Signal> BiquadFilter<S> {
     /// * `source` - Input signal
     /// * `center` - Center frequency in Hz
     /// * `q` - Q factor (bandwidth), typically 0.5-10.0. Higher = narrower band.
-    /// * `sample_rate` - Sample rate in Hz
-    pub fn bandpass(
-        source: S,
-        center: impl Into<Param>,
-        q: impl Into<Param>,
-        sample_rate: f64,
-    ) -> Self {
-        Self::new(source, center, q, FilterType::BandPass, sample_rate)
+    pub fn bandpass(source: S, center: impl Into<Param>, q: impl Into<Param>) -> Self {
+        Self::new(source, center, q, FilterType::BandPass)
     }
 
     /// Creates a notch filter (band-reject/band-stop).
@@ -250,14 +229,8 @@ impl<S: Signal> BiquadFilter<S> {
     /// * `source` - Input signal
     /// * `center` - Center frequency to reject in Hz
     /// * `q` - Q factor (notch width), typically 0.5-10.0. Higher = narrower notch.
-    /// * `sample_rate` - Sample rate in Hz
-    pub fn notch(
-        source: S,
-        center: impl Into<Param>,
-        q: impl Into<Param>,
-        sample_rate: f64,
-    ) -> Self {
-        Self::new(source, center, q, FilterType::Notch, sample_rate)
+    pub fn notch(source: S, center: impl Into<Param>, q: impl Into<Param>) -> Self {
+        Self::new(source, center, q, FilterType::Notch)
     }
 
     /// Creates an all-pass filter.
@@ -269,18 +242,12 @@ impl<S: Signal> BiquadFilter<S> {
     /// * `source` - Input signal
     /// * `frequency` - Center frequency for phase shift in Hz
     /// * `q` - Q factor, affects phase response
-    /// * `sample_rate` - Sample rate in Hz
-    pub fn allpass(
-        source: S,
-        frequency: impl Into<Param>,
-        q: impl Into<Param>,
-        sample_rate: f64,
-    ) -> Self {
-        Self::new(source, frequency, q, FilterType::AllPass, sample_rate)
+    pub fn allpass(source: S, frequency: impl Into<Param>, q: impl Into<Param>) -> Self {
+        Self::new(source, frequency, q, FilterType::AllPass)
     }
 }
 
-impl<S: Signal> Signal for BiquadFilter<S> {
+impl<const SAMPLE_RATE: u32, S: AudioSignal<SAMPLE_RATE>> Signal for BiquadFilter<SAMPLE_RATE, S> {
     fn next_sample(&mut self) -> f64 {
         // Only update coefficients if parameters are modulated
         if self.needs_coefficient_update {
@@ -306,54 +273,53 @@ impl<S: Signal> Signal for BiquadFilter<S> {
 }
 
 // Implement AudioSignal for BiquadFilter when the source is an AudioSignal
-impl<S: crate::AudioSignal> crate::AudioSignal for BiquadFilter<S> {
-    fn sample_rate(&self) -> f64 {
-        self.sample_rate
-    }
+impl<const SAMPLE_RATE: u32, S: AudioSignal<SAMPLE_RATE>> AudioSignal<SAMPLE_RATE>
+    for BiquadFilter<SAMPLE_RATE, S>
+{
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{combinators::SignalExt, ConstantSignal, SineOscillator};
+    use crate::{ConstantSignal, SineOscillator, combinators::SignalExt};
 
     #[test]
     fn test_lowpass_creation() {
-        let source = ConstantSignal(0.5);
-        let filter = BiquadFilter::lowpass(source, 1000.0, 0.707, 44100.0);
+        let source = ConstantSignal::<44100>(0.5);
+        let filter = BiquadFilter::lowpass(source, 1000.0, 0.707);
 
         assert_eq!(filter.filter_type, FilterType::LowPass);
-        assert_eq!(filter.sample_rate, 44100.0);
+        assert_eq!(filter.sample_rate(), 44100.0);
     }
 
     #[test]
     fn test_highpass_creation() {
-        let source = ConstantSignal(0.5);
-        let filter = BiquadFilter::highpass(source, 1000.0, 0.707, 44100.0);
+        let source = ConstantSignal::<44100>(0.5);
+        let filter = BiquadFilter::highpass(source, 1000.0, 0.707);
 
         assert_eq!(filter.filter_type, FilterType::HighPass);
     }
 
     #[test]
     fn test_bandpass_creation() {
-        let source = ConstantSignal(0.5);
-        let filter = BiquadFilter::bandpass(source, 1000.0, 2.0, 44100.0);
+        let source = ConstantSignal::<44100>(0.5);
+        let filter = BiquadFilter::bandpass(source, 1000.0, 2.0);
 
         assert_eq!(filter.filter_type, FilterType::BandPass);
     }
 
     #[test]
     fn test_notch_creation() {
-        let source = ConstantSignal(0.5);
-        let filter = BiquadFilter::notch(source, 1000.0, 2.0, 44100.0);
+        let source = ConstantSignal::<44100>(0.5);
+        let filter = BiquadFilter::notch(source, 1000.0, 2.0);
 
         assert_eq!(filter.filter_type, FilterType::Notch);
     }
 
     #[test]
     fn test_allpass_creation() {
-        let source = ConstantSignal(0.5);
-        let filter = BiquadFilter::allpass(source, 1000.0, 0.707, 44100.0);
+        let source = ConstantSignal::<44100>(0.5);
+        let filter = BiquadFilter::allpass(source, 1000.0, 0.707);
 
         assert_eq!(filter.filter_type, FilterType::AllPass);
     }
@@ -361,9 +327,9 @@ mod tests {
     #[test]
     fn test_lowpass_attenuates_high_frequencies() {
         // Create a high-frequency sine wave (10kHz)
-        let source = SineOscillator::new(10000.0, 44100.0);
+        let source = SineOscillator::<44100>::new(10000.0);
         // Filter with very low cutoff (100Hz)
-        let mut filter = BiquadFilter::lowpass(source, 100.0, 0.707, 44100.0);
+        let mut filter = BiquadFilter::lowpass(source, 100.0, 0.707);
 
         // Process some samples to let the filter settle
         for _ in 0..100 {
@@ -378,9 +344,9 @@ mod tests {
     #[test]
     fn test_lowpass_passes_low_frequencies() {
         // Create a low-frequency sine wave (100Hz)
-        let source = SineOscillator::new(100.0, 44100.0);
+        let source = SineOscillator::<44100>::new(100.0);
         // Filter with high cutoff (5kHz)
-        let mut filter = BiquadFilter::lowpass(source, 5000.0, 0.707, 44100.0);
+        let mut filter = BiquadFilter::lowpass(source, 5000.0, 0.707);
 
         // Process some samples
         for _ in 0..100 {
@@ -395,9 +361,9 @@ mod tests {
     #[test]
     fn test_highpass_attenuates_low_frequencies() {
         // Create a low-frequency sine wave (100Hz)
-        let source = SineOscillator::new(100.0, 44100.0);
+        let source = SineOscillator::<44100>::new(100.0);
         // Filter with high cutoff (5kHz) - should attenuate low frequencies
-        let mut filter = BiquadFilter::highpass(source, 5000.0, 0.707, 44100.0);
+        let mut filter = BiquadFilter::highpass(source, 5000.0, 0.707);
 
         // Process some samples to let the filter settle
         for _ in 0..100 {
@@ -412,8 +378,8 @@ mod tests {
     #[test]
     fn test_constant_input_dc_blocking() {
         // DC signal (constant value)
-        let source = ConstantSignal(1.0);
-        let mut filter = BiquadFilter::highpass(source, 100.0, 0.707, 44100.0);
+        let source = ConstantSignal::<44100>(1.0);
+        let mut filter = BiquadFilter::highpass(source, 100.0, 0.707);
 
         // High-pass should block DC
         for _ in 0..1000 {
@@ -427,8 +393,8 @@ mod tests {
     #[test]
     fn test_filter_stability() {
         // Test that the filter doesn't blow up with normal input
-        let source = SineOscillator::new(440.0, 44100.0);
-        let mut filter = BiquadFilter::lowpass(source, 1000.0, 5.0, 44100.0);
+        let source = SineOscillator::<44100>::new(440.0);
+        let mut filter = BiquadFilter::lowpass(source, 1000.0, 5.0);
 
         // Process many samples
         for _ in 0..10000 {
@@ -440,11 +406,11 @@ mod tests {
 
     #[test]
     fn test_bandpass_attenuates_extremes() {
-        let sample_rate = 44100.0;
+        let _sample_rate = 44100.0;
 
         // Test low frequency attenuation
-        let low_freq = SineOscillator::new(100.0, sample_rate);
-        let mut bp_low = BiquadFilter::bandpass(low_freq, 1000.0, 5.0, sample_rate);
+        let low_freq = SineOscillator::<44100>::new(100.0);
+        let mut bp_low = BiquadFilter::bandpass(low_freq, 1000.0, 5.0);
 
         for _ in 0..100 {
             bp_low.next_sample();
@@ -452,8 +418,8 @@ mod tests {
         let low_sample = bp_low.next_sample();
 
         // Test high frequency attenuation
-        let high_freq = SineOscillator::new(10000.0, sample_rate);
-        let mut bp_high = BiquadFilter::bandpass(high_freq, 1000.0, 5.0, sample_rate);
+        let high_freq = SineOscillator::<44100>::new(10000.0);
+        let mut bp_high = BiquadFilter::bandpass(high_freq, 1000.0, 5.0);
 
         for _ in 0..100 {
             bp_high.next_sample();
@@ -461,20 +427,28 @@ mod tests {
         let high_sample = bp_high.next_sample();
 
         // Both should be attenuated
-        assert!(low_sample.abs() < 0.3, "Low freq not attenuated: {}", low_sample);
-        assert!(high_sample.abs() < 0.3, "High freq not attenuated: {}", high_sample);
+        assert!(
+            low_sample.abs() < 0.3,
+            "Low freq not attenuated: {}",
+            low_sample
+        );
+        assert!(
+            high_sample.abs() < 0.3,
+            "High freq not attenuated: {}",
+            high_sample
+        );
     }
 
     #[test]
     fn test_modulated_cutoff() {
         // Use an LFO to modulate the cutoff frequency
-        let source = SineOscillator::new(440.0, 44100.0);
-        let lfo = SineOscillator::new(1.0, 44100.0);
+        let source = SineOscillator::<44100>::new(440.0);
+        let lfo = SineOscillator::<44100>::new(1.0);
 
         // LFO output is -1 to 1, scale to 500-1500 Hz
         let modulated_cutoff = lfo.gain(500.0).offset(1000.0);
 
-        let mut filter = BiquadFilter::lowpass(source, modulated_cutoff, 0.707, 44100.0);
+        let mut filter = BiquadFilter::lowpass(source, modulated_cutoff, 0.707);
 
         // Should update coefficients each sample
         assert!(filter.needs_coefficient_update);
@@ -488,8 +462,8 @@ mod tests {
 
     #[test]
     fn test_fixed_params_optimization() {
-        let source = ConstantSignal(1.0);
-        let filter = BiquadFilter::lowpass(source, 1000.0, 0.707, 44100.0);
+        let source = ConstantSignal::<44100>(1.0);
+        let filter = BiquadFilter::lowpass(source, 1000.0, 0.707);
 
         // With fixed params, should not need coefficient updates
         assert!(!filter.needs_coefficient_update);
@@ -498,8 +472,8 @@ mod tests {
     #[test]
     fn test_notch_filter() {
         // Notch should attenuate the center frequency
-        let source = SineOscillator::new(1000.0, 44100.0);
-        let mut filter = BiquadFilter::notch(source, 1000.0, 10.0, 44100.0);
+        let source = SineOscillator::<44100>::new(1000.0);
+        let mut filter = BiquadFilter::notch(source, 1000.0, 10.0);
 
         // Let filter settle (needs more time for notch to take effect)
         for _ in 0..1000 {
@@ -526,8 +500,8 @@ mod tests {
     #[test]
     fn test_allpass_preserves_amplitude() {
         // All-pass should preserve signal amplitude (roughly)
-        let source = SineOscillator::new(1000.0, 44100.0);
-        let mut filter = BiquadFilter::allpass(source, 1000.0, 0.707, 44100.0);
+        let source = SineOscillator::<44100>::new(1000.0);
+        let mut filter = BiquadFilter::allpass(source, 1000.0, 0.707);
 
         // Process enough samples for steady state
         for _ in 0..1000 {
@@ -543,15 +517,18 @@ mod tests {
         }
 
         // Should be close to 1.0 (allowing for some phase-related variation)
-        assert!(max_amplitude > 0.8 && max_amplitude < 1.2,
-                "All-pass amplitude not preserved: {}", max_amplitude);
+        assert!(
+            max_amplitude > 0.8 && max_amplitude < 1.2,
+            "All-pass amplitude not preserved: {}",
+            max_amplitude
+        );
     }
 
     #[test]
     fn test_q_factor_clamping() {
         // Very low Q should be clamped to prevent division by zero
-        let source = ConstantSignal(1.0);
-        let mut filter = BiquadFilter::lowpass(source, 1000.0, 0.0, 44100.0);
+        let source = ConstantSignal::<44100>(1.0);
+        let mut filter = BiquadFilter::lowpass(source, 1000.0, 0.0);
 
         // Should not panic or produce NaN
         for _ in 0..10 {
@@ -563,8 +540,8 @@ mod tests {
     #[test]
     fn test_frequency_clamping() {
         // Very high frequency should be clamped below Nyquist
-        let source = SineOscillator::new(440.0, 44100.0);
-        let mut filter = BiquadFilter::lowpass(source, 50000.0, 0.707, 44100.0);
+        let source = SineOscillator::<44100>::new(440.0);
+        let mut filter = BiquadFilter::lowpass(source, 50000.0, 0.707);
 
         // Should not panic or become unstable
         for _ in 0..100 {
