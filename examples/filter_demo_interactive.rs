@@ -3,34 +3,31 @@
 //! Press SPACE to cycle through different filter configurations.
 //! Press Q or ESC to quit.
 
+mod common;
+
 use anyhow::Result;
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{FromSample, Sample, SampleFormat, StreamConfig};
+use common::{ExampleAudioState, KeyAction, KeyboardConfig, is_quit_key, run_interactive_example};
 use crossterm::{
     ExecutableCommand,
-    event::{self, Event, KeyCode, KeyEvent},
-    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
+    event::{KeyCode, KeyEvent},
 };
 use earworm::{
     AudioSignalExt, BiquadFilter, Signal, SignalExt, SineOscillator, TriangleOscillator,
 };
 use std::io::{Write, stdout};
-use std::panic;
-use std::sync::{Arc, Mutex};
 
 const SAMPLE_RATE: u32 = 44100;
 
-/// Different filter configurations to cycle through
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FilterMode {
-    Raw,             // No filter
-    LowPass,         // Low-pass filter
-    HighPass,        // High-pass filter
-    BandPass,        // Band-pass filter
-    ResonantLowPass, // Low-pass with high resonance
-    SweptLowPass,    // Low-pass with LFO modulation
-    ChainedFilters,  // Multiple filters in series
-    NotchFilter,     // Notch filter
+    Raw,
+    LowPass,
+    HighPass,
+    BandPass,
+    ResonantLowPass,
+    SweptLowPass,
+    ChainedFilters,
+    NotchFilter,
 }
 
 impl FilterMode {
@@ -61,7 +58,6 @@ impl FilterMode {
     }
 }
 
-/// Enum to hold different filter types
 enum FilteredSignal {
     Raw(TriangleOscillator<SAMPLE_RATE>),
     LowPass(BiquadFilter<SAMPLE_RATE, TriangleOscillator<SAMPLE_RATE>>),
@@ -87,12 +83,10 @@ impl Signal for FilteredSignal {
             FilteredSignal::ChainedFilters(filter) => filter.next_sample(),
             FilteredSignal::NotchFilter(filter) => filter.next_sample(),
         };
-        // Scale output to avoid clipping
         sample * 0.3
     }
 }
 
-/// Audio state that manages the current filter configuration
 struct AudioState {
     signal: FilteredSignal,
     mode: FilterMode,
@@ -111,173 +105,74 @@ impl AudioState {
 
     fn set_mode(&mut self, mode: FilterMode) {
         self.mode = mode;
-
-        // Create new signal chain based on mode
         self.signal = match mode {
             FilterMode::Raw => FilteredSignal::Raw(TriangleOscillator::new(self.base_frequency)),
-
-            FilterMode::LowPass => {
-                let osc = TriangleOscillator::new(self.base_frequency);
-                FilteredSignal::LowPass(osc.lowpass_filter(800.0, 0.707))
-            }
-
-            FilterMode::HighPass => {
-                let osc = TriangleOscillator::new(self.base_frequency);
-                FilteredSignal::HighPass(osc.highpass_filter(600.0, 0.707))
-            }
-
-            FilterMode::BandPass => {
-                let osc = TriangleOscillator::new(self.base_frequency);
-                FilteredSignal::BandPass(osc.bandpass_filter(self.base_frequency, 5.0))
-            }
-
-            FilterMode::ResonantLowPass => {
-                let osc = TriangleOscillator::new(self.base_frequency);
-                FilteredSignal::ResonantLowPass(osc.lowpass_filter(500.0, 10.0))
-            }
-
+            FilterMode::LowPass => FilteredSignal::LowPass(
+                TriangleOscillator::new(self.base_frequency).lowpass_filter(800.0, 0.707),
+            ),
+            FilterMode::HighPass => FilteredSignal::HighPass(
+                TriangleOscillator::new(self.base_frequency).highpass_filter(600.0, 0.707),
+            ),
+            FilterMode::BandPass => FilteredSignal::BandPass(
+                TriangleOscillator::new(self.base_frequency)
+                    .bandpass_filter(self.base_frequency, 5.0),
+            ),
+            FilterMode::ResonantLowPass => FilteredSignal::ResonantLowPass(
+                TriangleOscillator::new(self.base_frequency).lowpass_filter(500.0, 10.0),
+            ),
             FilterMode::SweptLowPass => {
-                let osc = TriangleOscillator::new(self.base_frequency);
-                let lfo = SineOscillator::<SAMPLE_RATE>::new(0.5);
-                // LFO sweeps from 300Hz to 1500Hz
-                let modulated_cutoff = lfo.gain(600.0).offset(900.0);
-                FilteredSignal::SweptLowPass(osc.lowpass_filter(modulated_cutoff, 2.0))
+                let lfo = SineOscillator::<SAMPLE_RATE>::new(0.5)
+                    .gain(600.0)
+                    .offset(900.0);
+                FilteredSignal::SweptLowPass(
+                    TriangleOscillator::new(self.base_frequency).lowpass_filter(lfo, 2.0),
+                )
             }
-
-            FilterMode::ChainedFilters => {
-                let osc = TriangleOscillator::new(self.base_frequency);
-                let chained = osc
+            FilterMode::ChainedFilters => FilteredSignal::ChainedFilters(
+                TriangleOscillator::new(self.base_frequency)
                     .highpass_filter(100.0, 0.707)
-                    .lowpass_filter(1000.0, 0.707);
-                FilteredSignal::ChainedFilters(chained)
-            }
-
-            FilterMode::NotchFilter => {
-                let osc = TriangleOscillator::new(self.base_frequency);
-                FilteredSignal::NotchFilter(osc.notch_filter(self.base_frequency, 8.0))
-            }
+                    .lowpass_filter(1000.0, 0.707),
+            ),
+            FilterMode::NotchFilter => FilteredSignal::NotchFilter(
+                TriangleOscillator::new(self.base_frequency).notch_filter(self.base_frequency, 8.0),
+            ),
         };
     }
+}
 
+impl ExampleAudioState for AudioState {
     fn next_sample(&mut self) -> f64 {
         self.signal.next_sample()
     }
 }
 
-fn run_audio_stream<T>(
-    device: &cpal::Device,
-    config: &StreamConfig,
-    state: Arc<Mutex<AudioState>>,
-) -> Result<cpal::Stream>
-where
-    T: Sample + FromSample<f64> + cpal::SizedSample,
-{
-    let channels = config.channels as usize;
-
-    let stream = device.build_output_stream(
-        config,
-        move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
-            let mut state = state.lock().unwrap();
-            for frame in data.chunks_mut(channels) {
-                let sample = state.next_sample();
-                let value: T = T::from_sample(sample);
-                for s in frame.iter_mut() {
-                    *s = value;
-                }
-            }
-        },
-        |err| eprintln!("Audio stream error: {}", err),
-        None,
-    )?;
-
-    stream.play()?;
-    Ok(stream)
-}
-
 fn draw_ui(mode: FilterMode) -> Result<()> {
     let mut stdout = stdout();
-
-    // Clear and show simple status
     stdout.execute(crossterm::terminal::Clear(
         crossterm::terminal::ClearType::All,
     ))?;
     stdout.execute(crossterm::cursor::MoveTo(0, 0))?;
-
     write!(stdout, "Filter: {} | SPACE=switch Q=quit", mode.name())?;
-
     stdout.flush()?;
     Ok(())
 }
 
-/// Cleanup function to restore terminal state
-fn cleanup_terminal() {
-    let _ = stdout().execute(crossterm::cursor::Show);
-    let _ = stdout().execute(LeaveAlternateScreen);
-    let _ = disable_raw_mode();
-}
-
 fn main() -> Result<()> {
-    let frequency = 220.0; // A3 note (lower for better filter demonstration)
-
-    // Setup audio
-    let host = cpal::default_host();
-    let device = host
-        .default_output_device()
-        .ok_or_else(|| anyhow::anyhow!("No output device available"))?;
-
-    let config = device.default_output_config()?;
-
-    let state = Arc::new(Mutex::new(AudioState::new(frequency)));
-
-    // Start audio stream
-    let _stream = match config.sample_format() {
-        SampleFormat::F32 => run_audio_stream::<f32>(&device, &config.into(), state.clone())?,
-        SampleFormat::I16 => run_audio_stream::<i16>(&device, &config.into(), state.clone())?,
-        SampleFormat::U16 => run_audio_stream::<u16>(&device, &config.into(), state.clone())?,
-        sample_format => {
-            return Err(anyhow::anyhow!(
-                "Unsupported sample format: {}",
-                sample_format
-            ));
-        }
-    };
-
-    // Setup terminal
-    enable_raw_mode()?;
-    stdout().execute(EnterAlternateScreen)?;
-    stdout().execute(crossterm::cursor::Hide)?;
-
-    // Set up panic hook to restore terminal on panic
-    let original_hook = panic::take_hook();
-    panic::set_hook(Box::new(move |panic_info| {
-        cleanup_terminal();
-        original_hook(panic_info);
-    }));
-
-    // Draw initial UI
-    draw_ui(state.lock().unwrap().mode)?;
-
-    // Event loop
-    loop {
-        if event::poll(std::time::Duration::from_millis(100))?
-            && let Event::Key(KeyEvent { code, .. }) = event::read()?
-        {
-            match code {
-                KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => break,
-                KeyCode::Char(' ') => {
-                    let mut s = state.lock().unwrap();
-                    let next_mode = s.mode.next();
-                    s.set_mode(next_mode);
-                    drop(s);
-                    draw_ui(next_mode)?;
-                }
-                _ => {}
+    run_interactive_example(
+        AudioState::new(220.0),
+        KeyboardConfig::default(),
+        |state| draw_ui(state.lock().unwrap().mode),
+        |state, key_event: &KeyEvent| match key_event.code {
+            KeyCode::Char(' ') => {
+                let mut s = state.lock().unwrap();
+                let next_mode = s.mode.next();
+                s.set_mode(next_mode);
+                drop(s);
+                draw_ui(next_mode)?;
+                Ok(KeyAction::Continue)
             }
-        }
-    }
-
-    // Cleanup terminal
-    cleanup_terminal();
-
-    Ok(())
+            code if is_quit_key(code) => Ok(KeyAction::Exit),
+            _ => Ok(KeyAction::Continue),
+        },
+    )
 }

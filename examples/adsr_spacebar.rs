@@ -5,35 +5,29 @@
 //! Release SPACE to trigger the Release phase.
 //! Press Q or ESC to quit.
 
+mod common;
+
 use anyhow::Result;
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{FromSample, Sample, SampleFormat, StreamConfig};
+use common::{ExampleAudioState, KeyAction, KeyboardConfig, is_quit_key, run_interactive_example};
 use crossterm::{
     ExecutableCommand,
-    event::{
-        self, Event, KeyCode, KeyEvent, KeyEventKind, KeyboardEnhancementFlags,
-        PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
-    },
-    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
+    event::{KeyCode, KeyEvent, KeyEventKind},
 };
 use earworm::{ADSR, Curve, Signal, SineOscillator};
 use std::io::{Write, stdout};
-use std::panic;
-use std::sync::{Arc, Mutex};
 
 const SAMPLE_RATE: u32 = 44100;
 
-/// Audio state containing both oscillator and envelope.
 struct AudioState {
     oscillator: SineOscillator<SAMPLE_RATE>,
     envelope: ADSR,
+    space_pressed: bool,
 }
 
 impl AudioState {
     fn new(frequency: f64) -> Self {
         let oscillator = SineOscillator::new(frequency);
 
-        // Create ADSR with exponential curves for natural sound
         let envelope = ADSR::new(
             0.05, // 50ms attack
             0.1,  // 100ms decay
@@ -48,173 +42,72 @@ impl AudioState {
         Self {
             oscillator,
             envelope,
+            space_pressed: false,
         }
     }
 
-    fn note_on(&mut self) {
-        self.envelope.note_on();
-    }
-
-    fn note_off(&mut self) {
-        self.envelope.note_off();
+    fn handle_key_event(&mut self, code: KeyCode, kind: KeyEventKind) {
+        if let KeyCode::Char(' ') = code {
+            if matches!(kind, KeyEventKind::Press | KeyEventKind::Repeat) {
+                if !self.space_pressed {
+                    self.space_pressed = true;
+                    self.envelope.note_on();
+                }
+            } else if matches!(kind, KeyEventKind::Release) {
+                self.space_pressed = false;
+                self.envelope.note_off();
+            }
+        }
     }
 
     fn is_active(&self) -> bool {
         self.envelope.is_active()
     }
+}
 
+impl ExampleAudioState for AudioState {
     fn next_sample(&mut self) -> f64 {
         let oscillator_sample = self.oscillator.next_sample();
         let envelope_level = self.envelope.next_sample();
-
-        // Apply envelope to oscillator output
-        oscillator_sample * envelope_level * 0.3 // Scale to 30% to avoid clipping
+        oscillator_sample * envelope_level * 0.3
     }
-}
-
-fn run_audio_stream<T>(
-    device: &cpal::Device,
-    config: &StreamConfig,
-    state: Arc<Mutex<AudioState>>,
-) -> Result<cpal::Stream>
-where
-    T: Sample + FromSample<f64> + cpal::SizedSample,
-{
-    let channels = config.channels as usize;
-
-    let stream = device.build_output_stream(
-        config,
-        move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
-            let mut state = state.lock().unwrap();
-            for frame in data.chunks_mut(channels) {
-                let sample = state.next_sample();
-                let value: T = T::from_sample(sample);
-                for s in frame.iter_mut() {
-                    *s = value;
-                }
-            }
-        },
-        |err| eprintln!("Audio stream error: {}", err),
-        None,
-    )?;
-
-    stream.play()?;
-    Ok(stream)
 }
 
 fn draw_ui(is_active: bool) -> Result<()> {
     let mut stdout = stdout();
-
     stdout.execute(crossterm::terminal::Clear(
         crossterm::terminal::ClearType::All,
     ))?;
     stdout.execute(crossterm::cursor::MoveTo(0, 0))?;
-
     write!(
         stdout,
         "ADSR Envelope: {} | HOLD SPACE=play  RELEASE=stop  Q=quit",
         if is_active { "PLAYING" } else { "IDLE   " }
     )?;
-
     stdout.flush()?;
     Ok(())
 }
 
-/// Cleanup function to restore terminal state
-fn cleanup_terminal() {
-    let _ = stdout().execute(PopKeyboardEnhancementFlags);
-    let _ = stdout().execute(crossterm::cursor::Show);
-    let _ = stdout().execute(LeaveAlternateScreen);
-    let _ = disable_raw_mode();
-}
-
 fn main() -> Result<()> {
-    let frequency = 440.0; // A4 note
+    run_interactive_example(
+        AudioState::new(440.0),
+        KeyboardConfig::with_enhancements(),
+        |_state| draw_ui(false),
+        |state, key_event: &KeyEvent| {
+            let mut state_guard = state.lock().unwrap();
 
-    // Setup audio
-    let host = cpal::default_host();
-    let device = host
-        .default_output_device()
-        .ok_or_else(|| anyhow::anyhow!("No output device available"))?;
-
-    let config = device.default_output_config()?;
-
-    println!("Audio device: {} @ {} Hz", device.name()?, SAMPLE_RATE);
-
-    let state = Arc::new(Mutex::new(AudioState::new(frequency)));
-
-    // Start audio stream
-    let _stream = match config.sample_format() {
-        SampleFormat::F32 => run_audio_stream::<f32>(&device, &config.into(), state.clone())?,
-        SampleFormat::I16 => run_audio_stream::<i16>(&device, &config.into(), state.clone())?,
-        SampleFormat::U16 => run_audio_stream::<u16>(&device, &config.into(), state.clone())?,
-        sample_format => {
-            return Err(anyhow::anyhow!(
-                "Unsupported sample format: {}",
-                sample_format
-            ));
-        }
-    };
-
-    // Setup terminal - ORDER MATTERS!
-    // Must enable keyboard enhancement BEFORE entering alternate screen
-    stdout().execute(PushKeyboardEnhancementFlags(
-        KeyboardEnhancementFlags::REPORT_EVENT_TYPES,
-    ))?;
-
-    enable_raw_mode()?;
-    stdout().execute(EnterAlternateScreen)?;
-    stdout().execute(crossterm::cursor::Hide)?;
-
-    // Set up panic hook to restore terminal on panic
-    let original_hook = panic::take_hook();
-    panic::set_hook(Box::new(move |panic_info| {
-        cleanup_terminal();
-        original_hook(panic_info);
-    }));
-
-    // Draw initial UI
-    draw_ui(false)?;
-
-    let mut space_pressed = false;
-
-    // Event loop
-    loop {
-        if event::poll(std::time::Duration::from_millis(50))?
-            && let Event::Key(KeyEvent { code, kind, .. }) = event::read()?
-        {
-            match code {
-                // Quit on Q or ESC
-                KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => {
-                    if matches!(kind, KeyEventKind::Press) {
-                        break;
-                    }
-                }
-
-                // Spacebar - handle press/repeat/release
-                KeyCode::Char(' ') => {
-                    if matches!(kind, KeyEventKind::Press | KeyEventKind::Repeat) {
-                        if !space_pressed {
-                            space_pressed = true;
-                            state.lock().unwrap().note_on();
-                        }
-                    } else if matches!(kind, KeyEventKind::Release) {
-                        space_pressed = false;
-                        state.lock().unwrap().note_off();
-                    }
-                }
-
-                _ => {}
+            if is_quit_key(key_event.code) && matches!(key_event.kind, KeyEventKind::Press) {
+                return Ok(KeyAction::Exit);
             }
-        }
 
-        // Update UI periodically to show envelope state changes
-        let is_active = state.lock().unwrap().is_active();
-        draw_ui(is_active)?;
-    }
+            state_guard.handle_key_event(key_event.code, key_event.kind);
+            let is_active = state_guard.is_active();
+            drop(state_guard);
 
-    // Cleanup terminal
-    cleanup_terminal();
+            draw_ui(is_active)?;
+            Ok(KeyAction::Continue)
+        },
+    )?;
 
     println!("\nGoodbye!");
     Ok(())

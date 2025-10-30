@@ -5,20 +5,15 @@
 //!
 //! Press Q or ESC to quit.
 
+mod common;
+
 use anyhow::Result;
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{FromSample, Sample, SampleFormat, StreamConfig};
-use crossterm::{
-    ExecutableCommand,
-    event::{self, Event, KeyCode, KeyEvent},
-    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
-};
+use common::{ExampleAudioState, KeyAction, KeyboardConfig, is_quit_key, run_interactive_example};
+use crossterm::{ExecutableCommand, event::KeyEvent};
 use earworm::{
     AudioSignalExt, BiquadFilter, SawtoothOscillator, Signal, SignalExt, SquareOscillator,
 };
 use std::io::{Write, stdout};
-use std::panic;
-use std::sync::{Arc, Mutex};
 
 const SAMPLE_RATE: u32 = 44100;
 
@@ -65,114 +60,37 @@ impl Signal for DeadmauFilter {
     }
 }
 
-fn run_audio_stream<T>(
-    device: &cpal::Device,
-    config: &StreamConfig,
-    state: Arc<Mutex<DeadmauFilter>>,
-) -> Result<cpal::Stream>
-where
-    T: Sample + FromSample<f64> + cpal::SizedSample,
-{
-    let channels = config.channels as usize;
-
-    let stream = device.build_output_stream(
-        config,
-        move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
-            let mut state = state.lock().unwrap();
-            for frame in data.chunks_mut(channels) {
-                let sample = state.next_sample();
-                let value: T = T::from_sample(sample);
-                for s in frame.iter_mut() {
-                    *s = value;
-                }
-            }
-        },
-        |err| eprintln!("Audio stream error: {}", err),
-        None,
-    )?;
-
-    stream.play()?;
-    Ok(stream)
+impl ExampleAudioState for DeadmauFilter {
+    fn next_sample(&mut self) -> f64 {
+        Signal::next_sample(self)
+    }
 }
 
 fn draw_ui() -> Result<()> {
     let mut stdout = stdout();
-
-    // Clear and show simple status
     stdout.execute(crossterm::terminal::Clear(
         crossterm::terminal::ClearType::All,
     ))?;
     stdout.execute(crossterm::cursor::MoveTo(0, 0))?;
-
     write!(
         stdout,
         "Playing: Deadmau5 Filter (4kHz→50Hz @ 4Hz) | Q=quit"
     )?;
-
     stdout.flush()?;
     Ok(())
 }
 
-/// Cleanup function to restore terminal state
-fn cleanup_terminal() {
-    let _ = stdout().execute(crossterm::cursor::Show);
-    let _ = stdout().execute(LeaveAlternateScreen);
-    let _ = disable_raw_mode();
-}
-
 fn main() -> Result<()> {
-    // Setup audio
-    let host = cpal::default_host();
-    let device = host
-        .default_output_device()
-        .ok_or_else(|| anyhow::anyhow!("No output device available"))?;
-
-    let config = device.default_output_config()?;
-
-    let state = Arc::new(Mutex::new(DeadmauFilter::new()));
-
-    // Start audio stream
-    let _stream = match config.sample_format() {
-        SampleFormat::F32 => run_audio_stream::<f32>(&device, &config.into(), state.clone())?,
-        SampleFormat::I16 => run_audio_stream::<i16>(&device, &config.into(), state.clone())?,
-        SampleFormat::U16 => run_audio_stream::<u16>(&device, &config.into(), state.clone())?,
-        sample_format => {
-            return Err(anyhow::anyhow!(
-                "Unsupported sample format: {}",
-                sample_format
-            ));
-        }
-    };
-
-    // Setup terminal
-    enable_raw_mode()?;
-    stdout().execute(EnterAlternateScreen)?;
-    stdout().execute(crossterm::cursor::Hide)?;
-
-    // Set up panic hook to restore terminal on panic
-    let original_hook = panic::take_hook();
-    panic::set_hook(Box::new(move |panic_info| {
-        cleanup_terminal();
-        original_hook(panic_info);
-    }));
-
-    // Draw UI
-    draw_ui()?;
-
-    // Event loop
-    loop {
-        if event::poll(std::time::Duration::from_millis(100))?
-            && let Event::Key(KeyEvent { code, .. }) = event::read()?
-        {
-            match code {
-                KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => break,
-                _ => {}
+    run_interactive_example(
+        DeadmauFilter::new(),
+        KeyboardConfig::default(),
+        |_state| draw_ui(),
+        |_state, key_event: &KeyEvent| {
+            if is_quit_key(key_event.code) {
+                Ok(KeyAction::Exit)
+            } else {
+                Ok(KeyAction::Continue)
             }
-        }
-    }
-
-    // Cleanup terminal
-    cleanup_terminal();
-
-    Ok(())
+        },
+    )
 }
