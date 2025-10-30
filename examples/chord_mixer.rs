@@ -15,7 +15,7 @@ use crossterm::{
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use earworm::{
-    Mix, SawtoothOscillator, Signal, SignalExt, SineOscillator, SquareOscillator,
+    Mix3, Mix4, SawtoothOscillator, Signal, SignalExt, SineOscillator, SquareOscillator,
     TriangleOscillator,
 };
 use std::io::{Write, stdout};
@@ -78,34 +78,38 @@ impl AudioState {
         match chord_type {
             ChordType::Major => {
                 // Major triad using sine waves
-                Box::new(Mix {
-                    sources: vec![
-                        (Box::new(SineOscillator::new(c4, sample_rate)), 0.33),
-                        (Box::new(SineOscillator::new(e4, sample_rate)), 0.33),
-                        (Box::new(SineOscillator::new(g4, sample_rate)), 0.33),
-                    ],
-                })
+                Box::new(Mix3::new(
+                    SineOscillator::new(c4, sample_rate),
+                    0.33,
+                    SineOscillator::new(e4, sample_rate),
+                    0.33,
+                    SineOscillator::new(g4, sample_rate),
+                    0.33,
+                ))
             }
             ChordType::Minor => {
                 // Minor triad using triangle waves for a warmer sound
-                Box::new(Mix {
-                    sources: vec![
-                        (Box::new(TriangleOscillator::new(c4, sample_rate)), 0.33),
-                        (Box::new(TriangleOscillator::new(eb4, sample_rate)), 0.33),
-                        (Box::new(TriangleOscillator::new(g4, sample_rate)), 0.33),
-                    ],
-                })
+                Box::new(Mix3::new(
+                    TriangleOscillator::new(c4, sample_rate),
+                    0.33,
+                    TriangleOscillator::new(eb4, sample_rate),
+                    0.33,
+                    TriangleOscillator::new(g4, sample_rate),
+                    0.33,
+                ))
             }
             ChordType::Dominant7 => {
                 // Seventh chord using square waves for a bright sound
-                Box::new(Mix {
-                    sources: vec![
-                        (Box::new(SquareOscillator::new(c4, sample_rate)), 0.25),
-                        (Box::new(SquareOscillator::new(e4, sample_rate)), 0.25),
-                        (Box::new(SquareOscillator::new(g4, sample_rate)), 0.25),
-                        (Box::new(SquareOscillator::new(bb4, sample_rate)), 0.25),
-                    ],
-                })
+                Box::new(Mix4::new(
+                    SquareOscillator::new(c4, sample_rate),
+                    0.25,
+                    SquareOscillator::new(e4, sample_rate),
+                    0.25,
+                    SquareOscillator::new(g4, sample_rate),
+                    0.25,
+                    SquareOscillator::new(bb4, sample_rate),
+                    0.25,
+                ))
             }
             ChordType::Complex => {
                 // Complex chord mixing different waveform types
@@ -113,27 +117,30 @@ impl AudioState {
                 let lfo = SineOscillator::new(2.0, sample_rate);
 
                 Box::new(
-                    Mix {
-                        sources: vec![
-                            (Box::new(SineOscillator::new(c4, sample_rate)), 0.25),
-                            (Box::new(TriangleOscillator::new(e4, sample_rate)), 0.25),
-                            (Box::new(SquareOscillator::new(g4, sample_rate)), 0.20),
-                            (Box::new(SawtoothOscillator::new(c3, sample_rate)), 0.15),
-                        ],
-                    }
+                    Mix4::new(
+                        SineOscillator::new(c4, sample_rate),
+                        0.25,
+                        TriangleOscillator::new(e4, sample_rate),
+                        0.25,
+                        SquareOscillator::new(g4, sample_rate),
+                        0.20,
+                        SawtoothOscillator::new(c3, sample_rate),
+                        0.15,
+                    )
                     // Add a slow tremolo effect using the LFO
                     .multiply(lfo.offset(1.0).gain(0.5)),
                 )
             }
             ChordType::Octaves => {
                 // Same note across three octaves using sawtooth waves
-                Box::new(Mix {
-                    sources: vec![
-                        (Box::new(SawtoothOscillator::new(c3, sample_rate)), 0.40),
-                        (Box::new(SawtoothOscillator::new(c4, sample_rate)), 0.35),
-                        (Box::new(SawtoothOscillator::new(c5, sample_rate)), 0.25),
-                    ],
-                })
+                Box::new(Mix3::new(
+                    SawtoothOscillator::new(c3, sample_rate),
+                    0.40,
+                    SawtoothOscillator::new(c4, sample_rate),
+                    0.35,
+                    SawtoothOscillator::new(c5, sample_rate),
+                    0.25,
+                ))
             }
         }
     }

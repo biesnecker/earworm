@@ -12,8 +12,8 @@ pub mod signals;
 
 // Re-export commonly used types at the crate root
 pub use combinators::{
-    Abs, Add, Clamp, Crossfade, Gain, Gate, Invert, Map, Max, Min, Mix, Multiply, Offset,
-    SignalExt,
+    Abs, Add, Clamp, Crossfade, Gain, Gate, Invert, Map, Max, Min, Mix2, Mix3, Mix4, Multiply,
+    Offset, SignalExt,
 };
 pub use effects::Delay;
 pub use envelopes::{Curve, ADSR};

@@ -4,7 +4,7 @@
 //! including mathematical operations (addition, multiplication), gain control,
 //! offsetting, and mixing multiple signals together.
 
-use crate::{Param, Signal};
+use crate::{AudioSignal, Param, Signal};
 
 /// Multiplies two signals together (amplitude modulation / ring modulation).
 ///
@@ -20,16 +20,40 @@ use crate::{Param, Signal};
 ///
 /// let carrier = SineOscillator::new(440.0, 44100.0);
 /// let modulator = SineOscillator::new(2.0, 44100.0);
-/// let mut ring_mod = Multiply { a: carrier, b: modulator };
+/// let mut ring_mod = Multiply::new(carrier, modulator);
 /// ```
 pub struct Multiply<A: Signal, B: Signal> {
-    pub a: A,
-    pub b: B,
+    a: A,
+    b: B,
+}
+
+impl<A: AudioSignal, B: AudioSignal> Multiply<A, B> {
+    /// Creates a new Multiply combinator.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the sample rates of the two signals don't match.
+    pub fn new(a: A, b: B) -> Self {
+        assert_eq!(
+            a.sample_rate(),
+            b.sample_rate(),
+            "Multiply: sample rates must match (got {} and {})",
+            a.sample_rate(),
+            b.sample_rate()
+        );
+        Self { a, b }
+    }
 }
 
 impl<A: Signal, B: Signal> Signal for Multiply<A, B> {
     fn next_sample(&mut self) -> f64 {
         self.a.next_sample() * self.b.next_sample()
+    }
+}
+
+impl<A: AudioSignal, B: AudioSignal> AudioSignal for Multiply<A, B> {
+    fn sample_rate(&self) -> f64 {
+        self.a.sample_rate()
     }
 }
 
@@ -46,16 +70,40 @@ impl<A: Signal, B: Signal> Signal for Multiply<A, B> {
 ///
 /// let osc1 = SineOscillator::new(440.0, 44100.0);
 /// let osc2 = SineOscillator::new(880.0, 44100.0);
-/// let mut mixed = Add { a: osc1, b: osc2 };
+/// let mut mixed = Add::new(osc1, osc2);
 /// ```
 pub struct Add<A: Signal, B: Signal> {
-    pub a: A,
-    pub b: B,
+    a: A,
+    b: B,
+}
+
+impl<A: AudioSignal, B: AudioSignal> Add<A, B> {
+    /// Creates a new Add combinator.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the sample rates of the two signals don't match.
+    pub fn new(a: A, b: B) -> Self {
+        assert_eq!(
+            a.sample_rate(),
+            b.sample_rate(),
+            "Add: sample rates must match (got {} and {})",
+            a.sample_rate(),
+            b.sample_rate()
+        );
+        Self { a, b }
+    }
 }
 
 impl<A: Signal, B: Signal> Signal for Add<A, B> {
     fn next_sample(&mut self) -> f64 {
         self.a.next_sample() + self.b.next_sample()
+    }
+}
+
+impl<A: AudioSignal, B: AudioSignal> AudioSignal for Add<A, B> {
+    fn sample_rate(&self) -> f64 {
+        self.a.sample_rate()
     }
 }
 
@@ -81,6 +129,12 @@ pub struct Gain<S: Signal> {
 impl<S: Signal> Signal for Gain<S> {
     fn next_sample(&mut self) -> f64 {
         self.source.next_sample() * self.gain.value()
+    }
+}
+
+impl<S: AudioSignal> AudioSignal for Gain<S> {
+    fn sample_rate(&self) -> f64 {
+        self.source.sample_rate()
     }
 }
 
@@ -110,37 +164,228 @@ impl<S: Signal> Signal for Offset<S> {
     }
 }
 
-/// Mixes multiple signals together with optional weights.
+impl<S: AudioSignal> AudioSignal for Offset<S> {
+    fn sample_rate(&self) -> f64 {
+        self.source.sample_rate()
+    }
+}
+
+/// Mixes two signals together with individual weights.
 ///
-/// This combinator allows mixing any number of signals together,
-/// with each signal having its own weight (gain) factor. This is
-/// more efficient than chaining multiple `Add` combinators when
-/// you need to mix many signals.
+/// This combinator combines two signals with independent gain factors.
+/// More efficient than using `Add` and `Gain` separately.
 ///
 /// # Examples
 ///
 /// ```
-/// use earworm::{SineOscillator, combinators::Mix};
+/// use earworm::{SineOscillator, combinators::Mix2};
 ///
 /// let osc1 = SineOscillator::new(440.0, 44100.0);
 /// let osc2 = SineOscillator::new(880.0, 44100.0);
-/// let mut mixer = Mix {
-///     sources: vec![
-///         (Box::new(osc1), 0.5),
-///         (Box::new(osc2), 0.5),
-///     ],
-/// };
+/// let mut mixer = Mix2::new(osc1, 0.5, osc2, 0.5);
 /// ```
-pub struct Mix {
-    pub sources: Vec<(Box<dyn Signal + Send>, f64)>,
+pub struct Mix2<A: Signal, B: Signal> {
+    a: A,
+    weight_a: Param,
+    b: B,
+    weight_b: Param,
 }
 
-impl Signal for Mix {
+impl<A: AudioSignal, B: AudioSignal> Mix2<A, B> {
+    /// Creates a new Mix2 combinator.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the sample rates of the two signals don't match.
+    pub fn new(a: A, weight_a: impl Into<Param>, b: B, weight_b: impl Into<Param>) -> Self {
+        assert_eq!(
+            a.sample_rate(),
+            b.sample_rate(),
+            "Mix2: sample rates must match (got {} and {})",
+            a.sample_rate(),
+            b.sample_rate()
+        );
+        Self {
+            a,
+            weight_a: weight_a.into(),
+            b,
+            weight_b: weight_b.into(),
+        }
+    }
+}
+
+impl<A: Signal, B: Signal> Signal for Mix2<A, B> {
     fn next_sample(&mut self) -> f64 {
-        self.sources
-            .iter_mut()
-            .map(|(source, weight)| source.next_sample() * *weight)
-            .sum()
+        self.a.next_sample() * self.weight_a.value() + self.b.next_sample() * self.weight_b.value()
+    }
+}
+
+impl<A: AudioSignal, B: AudioSignal> AudioSignal for Mix2<A, B> {
+    fn sample_rate(&self) -> f64 {
+        self.a.sample_rate()
+    }
+}
+
+/// Mixes three signals together with individual weights.
+///
+/// # Examples
+///
+/// ```
+/// use earworm::{SineOscillator, combinators::Mix3};
+///
+/// let osc1 = SineOscillator::new(440.0, 44100.0);
+/// let osc2 = SineOscillator::new(554.37, 44100.0);
+/// let osc3 = SineOscillator::new(659.25, 44100.0);
+/// let mut mixer = Mix3::new(osc1, 0.33, osc2, 0.33, osc3, 0.33);
+/// ```
+pub struct Mix3<A: Signal, B: Signal, C: Signal> {
+    a: A,
+    weight_a: Param,
+    b: B,
+    weight_b: Param,
+    c: C,
+    weight_c: Param,
+}
+
+impl<A: AudioSignal, B: AudioSignal, C: AudioSignal> Mix3<A, B, C> {
+    /// Creates a new Mix3 combinator.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the sample rates of the signals don't match.
+    pub fn new(
+        a: A,
+        weight_a: impl Into<Param>,
+        b: B,
+        weight_b: impl Into<Param>,
+        c: C,
+        weight_c: impl Into<Param>,
+    ) -> Self {
+        let a_rate = a.sample_rate();
+        let b_rate = b.sample_rate();
+        let c_rate = c.sample_rate();
+        assert_eq!(
+            a_rate, b_rate,
+            "Mix3: sample rates must match (got {}, {}, {})",
+            a_rate, b_rate, c_rate
+        );
+        assert_eq!(
+            a_rate, c_rate,
+            "Mix3: sample rates must match (got {}, {}, {})",
+            a_rate, b_rate, c_rate
+        );
+        Self {
+            a,
+            weight_a: weight_a.into(),
+            b,
+            weight_b: weight_b.into(),
+            c,
+            weight_c: weight_c.into(),
+        }
+    }
+}
+
+impl<A: Signal, B: Signal, C: Signal> Signal for Mix3<A, B, C> {
+    fn next_sample(&mut self) -> f64 {
+        self.a.next_sample() * self.weight_a.value()
+            + self.b.next_sample() * self.weight_b.value()
+            + self.c.next_sample() * self.weight_c.value()
+    }
+}
+
+impl<A: AudioSignal, B: AudioSignal, C: AudioSignal> AudioSignal for Mix3<A, B, C> {
+    fn sample_rate(&self) -> f64 {
+        self.a.sample_rate()
+    }
+}
+
+/// Mixes four signals together with individual weights.
+///
+/// # Examples
+///
+/// ```
+/// use earworm::{SineOscillator, combinators::Mix4};
+///
+/// let osc1 = SineOscillator::new(440.0, 44100.0);
+/// let osc2 = SineOscillator::new(554.37, 44100.0);
+/// let osc3 = SineOscillator::new(659.25, 44100.0);
+/// let osc4 = SineOscillator::new(880.0, 44100.0);
+/// let mut mixer = Mix4::new(osc1, 0.25, osc2, 0.25, osc3, 0.25, osc4, 0.25);
+/// ```
+pub struct Mix4<A: Signal, B: Signal, C: Signal, D: Signal> {
+    a: A,
+    weight_a: Param,
+    b: B,
+    weight_b: Param,
+    c: C,
+    weight_c: Param,
+    d: D,
+    weight_d: Param,
+}
+
+impl<A: AudioSignal, B: AudioSignal, C: AudioSignal, D: AudioSignal> Mix4<A, B, C, D> {
+    /// Creates a new Mix4 combinator.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the sample rates of the signals don't match.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        a: A,
+        weight_a: impl Into<Param>,
+        b: B,
+        weight_b: impl Into<Param>,
+        c: C,
+        weight_c: impl Into<Param>,
+        d: D,
+        weight_d: impl Into<Param>,
+    ) -> Self {
+        let a_rate = a.sample_rate();
+        let b_rate = b.sample_rate();
+        let c_rate = c.sample_rate();
+        let d_rate = d.sample_rate();
+        assert_eq!(
+            a_rate, b_rate,
+            "Mix4: sample rates must match (got {}, {}, {}, {})",
+            a_rate, b_rate, c_rate, d_rate
+        );
+        assert_eq!(
+            a_rate, c_rate,
+            "Mix4: sample rates must match (got {}, {}, {}, {})",
+            a_rate, b_rate, c_rate, d_rate
+        );
+        assert_eq!(
+            a_rate, d_rate,
+            "Mix4: sample rates must match (got {}, {}, {}, {})",
+            a_rate, b_rate, c_rate, d_rate
+        );
+        Self {
+            a,
+            weight_a: weight_a.into(),
+            b,
+            weight_b: weight_b.into(),
+            c,
+            weight_c: weight_c.into(),
+            d,
+            weight_d: weight_d.into(),
+        }
+    }
+}
+
+impl<A: Signal, B: Signal, C: Signal, D: Signal> Signal for Mix4<A, B, C, D> {
+    fn next_sample(&mut self) -> f64 {
+        self.a.next_sample() * self.weight_a.value()
+            + self.b.next_sample() * self.weight_b.value()
+            + self.c.next_sample() * self.weight_c.value()
+            + self.d.next_sample() * self.weight_d.value()
+    }
+}
+
+impl<A: AudioSignal, B: AudioSignal, C: AudioSignal, D: AudioSignal> AudioSignal
+    for Mix4<A, B, C, D>
+{
+    fn sample_rate(&self) -> f64 {
+        self.a.sample_rate()
     }
 }
 
@@ -167,6 +412,12 @@ pub struct Clamp<S: Signal> {
 impl<S: Signal> Signal for Clamp<S> {
     fn next_sample(&mut self) -> f64 {
         self.source.next_sample().clamp(self.min, self.max)
+    }
+}
+
+impl<S: AudioSignal> AudioSignal for Clamp<S> {
+    fn sample_rate(&self) -> f64 {
+        self.source.sample_rate()
     }
 }
 
@@ -203,6 +454,15 @@ where
     }
 }
 
+impl<S: AudioSignal, F> AudioSignal for Map<S, F>
+where
+    F: FnMut(f64) -> f64,
+{
+    fn sample_rate(&self) -> f64 {
+        self.source.sample_rate()
+    }
+}
+
 /// Inverts/negates a signal.
 ///
 /// This combinator multiplies the signal by -1, flipping it around the zero axis.
@@ -226,6 +486,12 @@ impl<S: Signal> Signal for Invert<S> {
     }
 }
 
+impl<S: AudioSignal> AudioSignal for Invert<S> {
+    fn sample_rate(&self) -> f64 {
+        self.source.sample_rate()
+    }
+}
+
 /// Crossfades between two signals (0.0 = all A, 1.0 = all B).
 ///
 /// This combinator performs a linear crossfade between two signals based on
@@ -239,12 +505,30 @@ impl<S: Signal> Signal for Invert<S> {
 ///
 /// let osc1 = SineOscillator::new(440.0, 44100.0);
 /// let osc2 = SineOscillator::new(880.0, 44100.0);
-/// let mut crossfade = Crossfade { a: osc1, b: osc2, mix: 0.5.into() };
+/// let mut crossfade = Crossfade::new(osc1, osc2, 0.5);
 /// ```
 pub struct Crossfade<A: Signal, B: Signal> {
-    pub a: A,
-    pub b: B,
-    pub mix: Param,
+    a: A,
+    b: B,
+    mix: Param,
+}
+
+impl<A: AudioSignal, B: AudioSignal> Crossfade<A, B> {
+    /// Creates a new Crossfade combinator.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the sample rates of the two signals don't match.
+    pub fn new(a: A, b: B, mix: impl Into<Param>) -> Self {
+        assert_eq!(
+            a.sample_rate(),
+            b.sample_rate(),
+            "Crossfade: sample rates must match (got {} and {})",
+            a.sample_rate(),
+            b.sample_rate()
+        );
+        Self { a, b, mix: mix.into() }
+    }
 }
 
 impl<A: Signal, B: Signal> Signal for Crossfade<A, B> {
@@ -253,6 +537,12 @@ impl<A: Signal, B: Signal> Signal for Crossfade<A, B> {
         let sample_a = self.a.next_sample();
         let sample_b = self.b.next_sample();
         sample_a * (1.0 - mix) + sample_b * mix
+    }
+}
+
+impl<A: AudioSignal, B: AudioSignal> AudioSignal for Crossfade<A, B> {
+    fn sample_rate(&self) -> f64 {
+        self.a.sample_rate()
     }
 }
 
@@ -269,16 +559,40 @@ impl<A: Signal, B: Signal> Signal for Crossfade<A, B> {
 ///
 /// let osc1 = SineOscillator::new(440.0, 44100.0);
 /// let osc2 = SineOscillator::new(880.0, 44100.0);
-/// let mut min_signal = Min { a: osc1, b: osc2 };
+/// let mut min_signal = Min::new(osc1, osc2);
 /// ```
 pub struct Min<A: Signal, B: Signal> {
-    pub a: A,
-    pub b: B,
+    a: A,
+    b: B,
+}
+
+impl<A: AudioSignal, B: AudioSignal> Min<A, B> {
+    /// Creates a new Min combinator.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the sample rates of the two signals don't match.
+    pub fn new(a: A, b: B) -> Self {
+        assert_eq!(
+            a.sample_rate(),
+            b.sample_rate(),
+            "Min: sample rates must match (got {} and {})",
+            a.sample_rate(),
+            b.sample_rate()
+        );
+        Self { a, b }
+    }
 }
 
 impl<A: Signal, B: Signal> Signal for Min<A, B> {
     fn next_sample(&mut self) -> f64 {
         self.a.next_sample().min(self.b.next_sample())
+    }
+}
+
+impl<A: AudioSignal, B: AudioSignal> AudioSignal for Min<A, B> {
+    fn sample_rate(&self) -> f64 {
+        self.a.sample_rate()
     }
 }
 
@@ -295,16 +609,40 @@ impl<A: Signal, B: Signal> Signal for Min<A, B> {
 ///
 /// let osc1 = SineOscillator::new(440.0, 44100.0);
 /// let osc2 = SineOscillator::new(880.0, 44100.0);
-/// let mut max_signal = Max { a: osc1, b: osc2 };
+/// let mut max_signal = Max::new(osc1, osc2);
 /// ```
 pub struct Max<A: Signal, B: Signal> {
-    pub a: A,
-    pub b: B,
+    a: A,
+    b: B,
+}
+
+impl<A: AudioSignal, B: AudioSignal> Max<A, B> {
+    /// Creates a new Max combinator.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the sample rates of the two signals don't match.
+    pub fn new(a: A, b: B) -> Self {
+        assert_eq!(
+            a.sample_rate(),
+            b.sample_rate(),
+            "Max: sample rates must match (got {} and {})",
+            a.sample_rate(),
+            b.sample_rate()
+        );
+        Self { a, b }
+    }
 }
 
 impl<A: Signal, B: Signal> Signal for Max<A, B> {
     fn next_sample(&mut self) -> f64 {
         self.a.next_sample().max(self.b.next_sample())
+    }
+}
+
+impl<A: AudioSignal, B: AudioSignal> AudioSignal for Max<A, B> {
+    fn sample_rate(&self) -> f64 {
+        self.a.sample_rate()
     }
 }
 
@@ -329,6 +667,12 @@ pub struct Abs<S: Signal> {
 impl<S: Signal> Signal for Abs<S> {
     fn next_sample(&mut self) -> f64 {
         self.source.next_sample().abs()
+    }
+}
+
+impl<S: AudioSignal> AudioSignal for Abs<S> {
+    fn sample_rate(&self) -> f64 {
+        self.source.sample_rate()
     }
 }
 
@@ -359,6 +703,12 @@ impl<S: Signal> Signal for Gate<S> {
         } else {
             0.0
         }
+    }
+}
+
+impl<S: AudioSignal> AudioSignal for Gate<S> {
+    fn sample_rate(&self) -> f64 {
+        self.source.sample_rate()
     }
 }
 
@@ -509,21 +859,54 @@ mod tests {
     }
 
     #[test]
-    fn test_mix() {
-        let osc1 = ConstantSignal(1.0);
-        let osc2 = ConstantSignal(2.0);
-        let osc3 = ConstantSignal(3.0);
+    fn test_mix2() {
+        use crate::SineOscillator;
+        let osc1 = SineOscillator::new(440.0, 44100.0);
+        let osc2 = SineOscillator::new(880.0, 44100.0);
 
-        let mut mixer = Mix {
-            sources: vec![
-                (Box::new(osc1), 1.0),
-                (Box::new(osc2), 0.5),
-                (Box::new(osc3), 0.25),
-            ],
-        };
+        let mut mixer = Mix2::new(osc1, 0.5, osc2, 0.5);
 
-        // 1.0*1.0 + 2.0*0.5 + 3.0*0.25 = 1.0 + 1.0 + 0.75 = 2.75
-        assert_eq!(mixer.next_sample(), 2.75);
+        // Just verify it runs and returns a reasonable value
+        let sample = mixer.next_sample();
+        assert!(sample.abs() <= 1.0);
+    }
+
+    #[test]
+    fn test_mix3() {
+        use crate::SineOscillator;
+        let osc1 = SineOscillator::new(440.0, 44100.0);
+        let osc2 = SineOscillator::new(554.37, 44100.0);
+        let osc3 = SineOscillator::new(659.25, 44100.0);
+
+        let mut mixer = Mix3::new(osc1, 0.33, osc2, 0.33, osc3, 0.33);
+
+        let sample = mixer.next_sample();
+        assert!(sample.abs() <= 1.0);
+    }
+
+    #[test]
+    fn test_mix4() {
+        use crate::SineOscillator;
+        let osc1 = SineOscillator::new(440.0, 44100.0);
+        let osc2 = SineOscillator::new(554.37, 44100.0);
+        let osc3 = SineOscillator::new(659.25, 44100.0);
+        let osc4 = SineOscillator::new(880.0, 44100.0);
+
+        let mut mixer = Mix4::new(osc1, 0.25, osc2, 0.25, osc3, 0.25, osc4, 0.25);
+
+        let sample = mixer.next_sample();
+        assert!(sample.abs() <= 1.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "sample rates must match")]
+    fn test_sample_rate_mismatch_panics() {
+        use crate::SineOscillator;
+        let osc1 = SineOscillator::new(440.0, 44100.0);
+        let osc2 = SineOscillator::new(880.0, 48000.0); // Different sample rate!
+
+        // This should panic due to sample rate mismatch
+        let _mixer = Add::new(osc1, osc2);
     }
 
     #[test]

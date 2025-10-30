@@ -70,16 +70,16 @@ impl DelayWrapper {
 
         match delay_type {
             DelayType::Slapback => {
-                DelayWrapper::Slapback(Delay::slapback(source, sample_rate))
+                DelayWrapper::Slapback(Delay::slapback(source))
             }
             DelayType::ShortEcho => {
-                DelayWrapper::ShortEcho(Delay::echo(source, 0.2, 0.5, sample_rate))
+                DelayWrapper::ShortEcho(Delay::echo(source, 0.2, 0.5))
             }
             DelayType::MediumEcho => {
-                DelayWrapper::MediumEcho(Delay::echo(source, 0.375, 0.6, sample_rate))
+                DelayWrapper::MediumEcho(Delay::echo(source, 0.375, 0.6))
             }
             DelayType::LongEcho => {
-                DelayWrapper::LongEcho(Delay::echo(source, 0.5, 0.75, sample_rate))
+                DelayWrapper::LongEcho(Delay::echo(source, 0.5, 0.75))
             }
             DelayType::ModulatedDelay => {
                 // Create an LFO to modulate the delay time
@@ -90,11 +90,10 @@ impl DelayWrapper {
                     mod_lfo, // modulated delay time
                     0.6,     // feedback
                     0.5,     // mix
-                    sample_rate,
                 ))
             }
             DelayType::NoDry => {
-                DelayWrapper::NoDry(Delay::new(source, 0.5, 0.5, 0.6, 1.0, sample_rate))
+                DelayWrapper::NoDry(Delay::new(source, 0.5, 0.5, 0.6, 1.0))
             }
         }
     }
