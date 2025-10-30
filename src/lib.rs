@@ -12,4 +12,4 @@ pub use oscillators::{
     SquareOscillator, TriangleOscillator,
 };
 pub use noise::{PinkNoise, WhiteNoise};
-pub use signal::Signal;
+pub use signal::{ConstantSignal, Param, Signal};

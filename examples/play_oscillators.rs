@@ -57,8 +57,8 @@ enum OscillatorWrapper {
     Triangle(TriangleOscillator),
     Sawtooth(SawtoothOscillator),
     Square(SquareOscillator),
-    Pulse(PulseOscillator<f64>),
-    PulseLFO(PulseOscillator<SineOscillator>),
+    Pulse(PulseOscillator),
+    PulseLFO(PulseOscillator),
 }
 
 impl OscillatorWrapper {
@@ -78,12 +78,20 @@ impl OscillatorWrapper {
             }
             OscillatorType::Pulse => {
                 // Use 0.25 for a 25% duty cycle (maps to 0.625 internally)
-                OscillatorWrapper::Pulse(PulseOscillator::new(frequency, sample_rate, 0.25))
+                OscillatorWrapper::Pulse(PulseOscillator::new(
+                    frequency,
+                    sample_rate,
+                    0.25.into(),
+                ))
             }
             OscillatorType::PulseLFO => {
                 // Create an LFO at 0.5 Hz to modulate the pulse width
                 let lfo = SineOscillator::new(0.5, sample_rate);
-                OscillatorWrapper::PulseLFO(PulseOscillator::new(frequency, sample_rate, lfo))
+                OscillatorWrapper::PulseLFO(PulseOscillator::new(
+                    frequency,
+                    sample_rate,
+                    lfo.into(),
+                ))
             }
         }
     }

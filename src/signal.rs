@@ -1,7 +1,8 @@
-//! Core signal processing trait.
+//! Core signal processing trait and parameter types.
 //!
 //! This module provides the fundamental `Signal` trait that represents
-//! any audio signal source or processor that can generate samples.
+//! any audio signal source or processor that can generate samples, as well
+//! as the `Param` type for parameters that can be either fixed or modulated.
 
 /// Common interface for all signal sources and processors.
 ///
@@ -34,31 +35,175 @@ pub trait Signal {
     }
 }
 
-/// Implementation of `Signal` for `f64` representing a constant signal value.
+/// A constant signal that always returns the same value.
 ///
-/// This allows using constant values anywhere a `Signal` is expected,
-/// which is useful for DC offsets, fixed gain values, or testing.
+/// This is a lightweight wrapper around `f64` that implements `Signal`,
+/// useful for creating fixed parameters that can be converted into `Param`.
 ///
 /// # Examples
 ///
 /// ```
-/// use earworm::Signal;
+/// use earworm::{ConstantSignal, Param};
 ///
-/// let mut constant = 0.5_f64;
-/// assert_eq!(constant.next_sample(), 0.5);
-/// assert_eq!(constant.next_sample(), 0.5);
-///
-/// let mut buffer = vec![0.0; 4];
-/// constant.process(&mut buffer);
-/// assert_eq!(buffer, vec![0.5, 0.5, 0.5, 0.5]);
+/// let constant = ConstantSignal(0.5);
+/// let param: Param = constant.into();
 /// ```
-impl Signal for f64 {
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ConstantSignal(pub f64);
+
+impl Signal for ConstantSignal {
     fn next_sample(&mut self) -> f64 {
-        *self
+        self.0
     }
 
     fn process(&mut self, buffer: &mut [f64]) {
-        // Optimized implementation for constant values
-        buffer.fill(*self);
+        buffer.fill(self.0);
+    }
+}
+
+impl From<f64> for ConstantSignal {
+    fn from(value: f64) -> Self {
+        ConstantSignal(value)
+    }
+}
+
+/// A parameter that can be either a fixed value or modulated by a signal.
+///
+/// This type is used throughout the library for parameters that can be
+/// controlled either statically (with a fixed value) or dynamically (by
+/// another signal source like an LFO or envelope).
+///
+/// Using `Param` instead of generics simplifies type signatures and allows
+/// for heterogeneous collections of modulatable parameters, at the cost of
+/// a small performance overhead from dynamic dispatch.
+///
+/// # Examples
+///
+/// ```
+/// use earworm::{Param, SineOscillator};
+///
+/// // Fixed parameter - f64 converts to ConstantSignal, then to Param
+/// let mut fixed_param: Param = 0.5.into();
+/// assert_eq!(fixed_param.value(), 0.5);
+///
+/// // Modulated parameter using Into
+/// let lfo = SineOscillator::new(2.0, 44100.0);
+/// let mut modulated_param: Param = lfo.into();
+/// let value = modulated_param.value(); // Gets next sample from LFO
+///
+/// // Or explicitly with Param::modulated()
+/// let lfo2 = SineOscillator::new(2.0, 44100.0);
+/// let mut modulated_param2 = Param::modulated(lfo2);
+/// ```
+pub enum Param {
+    /// A fixed, constant value
+    Fixed(f64),
+    /// A value modulated by a signal source
+    Signal(Box<dyn Signal + Send>),
+}
+
+impl Param {
+    /// Gets the current value of the parameter.
+    ///
+    /// For fixed parameters, this returns the constant value.
+    /// For modulated parameters, this advances the signal and returns the next sample.
+    ///
+    /// # Returns
+    ///
+    /// The current parameter value
+    pub fn value(&mut self) -> f64 {
+        match self {
+            Param::Fixed(v) => *v,
+            Param::Signal(s) => s.next_sample(),
+        }
+    }
+
+    /// Creates a fixed parameter with the given value.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The constant value for this parameter
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use earworm::Param;
+    ///
+    /// let param = Param::fixed(0.75);
+    /// ```
+    pub fn fixed(value: f64) -> Self {
+        Param::Fixed(value)
+    }
+
+    /// Creates a modulated parameter controlled by a signal source.
+    ///
+    /// # Arguments
+    ///
+    /// * `signal` - Any type implementing `Signal + Send` to control this parameter
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use earworm::{Param, SineOscillator};
+    ///
+    /// let lfo = SineOscillator::new(1.0, 44100.0);
+    /// let param = Param::modulated(lfo);
+    /// ```
+    pub fn modulated(signal: impl Signal + Send + 'static) -> Self {
+        Param::Signal(Box::new(signal))
+    }
+}
+
+impl From<f64> for Param {
+    fn from(value: f64) -> Self {
+        Param::Fixed(value)
+    }
+}
+
+impl<S: Signal + Send + 'static> From<S> for Param {
+    fn from(signal: S) -> Self {
+        Param::Signal(Box::new(signal))
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_f64_to_constant_signal() {
+        let constant: ConstantSignal = 0.5.into();
+        assert_eq!(constant.0, 0.5);
+    }
+
+    #[test]
+    fn test_f64_to_param() {
+        let param: Param = 0.5.into();
+        match param {
+            Param::Fixed(v) => assert_eq!(v, 0.5),
+            Param::Signal(_) => panic!("Expected Fixed, got Signal"),
+        }
+    }
+
+    #[test]
+    fn test_signal_to_param() {
+        use crate::SineOscillator;
+        let lfo = SineOscillator::new(1.0, 44100.0);
+        let param: Param = lfo.into();
+        match param {
+            Param::Fixed(_) => panic!("Expected Signal, got Fixed"),
+            Param::Signal(_) => {}, // Success
+        }
+    }
+
+    #[test]
+    fn test_constant_signal_to_param() {
+        // ConstantSignal converts to Param::Signal (can't specialize without nightly)
+        // For efficient Param::Fixed, use f64.into() directly
+        let constant = ConstantSignal(0.75);
+        let param: Param = constant.into();
+        match param {
+            Param::Signal(_) => {}, // Success - ConstantSignal is a Signal
+            Param::Fixed(_) => panic!("Unexpected Fixed variant"),
+        }
     }
 }
