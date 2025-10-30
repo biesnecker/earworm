@@ -17,6 +17,7 @@ use earworm::{
 };
 use std::io::{Write, stdout};
 use std::sync::{Arc, Mutex};
+use std::panic;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum OscillatorType {
@@ -203,6 +204,13 @@ fn draw_ui(osc_type: OscillatorType, frequency: f64) -> Result<()> {
     Ok(())
 }
 
+/// Cleanup function to restore terminal state
+fn cleanup_terminal() {
+    let _ = stdout().execute(crossterm::cursor::Show);
+    let _ = stdout().execute(LeaveAlternateScreen);
+    let _ = disable_raw_mode();
+}
+
 fn main() -> Result<()> {
     let frequency = 440.0; // A4 note
 
@@ -235,6 +243,13 @@ fn main() -> Result<()> {
     stdout().execute(EnterAlternateScreen)?;
     stdout().execute(crossterm::cursor::Hide)?;
 
+    // Set up panic hook to restore terminal on panic
+    let original_hook = panic::take_hook();
+    panic::set_hook(Box::new(move |panic_info| {
+        cleanup_terminal();
+        original_hook(panic_info);
+    }));
+
     // Draw initial UI
     draw_ui(state.lock().unwrap().osc_type, frequency)?;
 
@@ -258,9 +273,7 @@ fn main() -> Result<()> {
     }
 
     // Cleanup terminal
-    stdout().execute(crossterm::cursor::Show)?;
-    stdout().execute(LeaveAlternateScreen)?;
-    disable_raw_mode()?;
+    cleanup_terminal();
 
     Ok(())
 }

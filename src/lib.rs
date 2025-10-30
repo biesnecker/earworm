@@ -5,6 +5,8 @@
 mod signal;
 pub mod oscillators;
 pub mod noise;
+pub mod envelopes;
+pub mod combinators;
 
 // Re-export commonly used types at the crate root
 pub use oscillators::{
@@ -13,3 +15,8 @@ pub use oscillators::{
 };
 pub use noise::{PinkNoise, WhiteNoise};
 pub use signal::{ConstantSignal, Param, Signal};
+pub use envelopes::{Curve, ADSR};
+pub use combinators::{
+    Abs, Add, Clamp, Crossfade, Gain, Gate, Invert, Map, Max, Min, Mix, Multiply, Offset,
+    SignalExt,
+};
