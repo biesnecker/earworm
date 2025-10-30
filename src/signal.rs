@@ -152,6 +152,11 @@ impl Param {
     pub fn modulated(signal: impl Signal + Send + 'static) -> Self {
         Param::Signal(Box::new(signal))
     }
+
+    /// Returns true if this parameter is fixed (non-modulated).
+    pub fn is_fixed(&self) -> bool {
+        matches!(self, Param::Fixed(_))
+    }
 }
 
 impl From<f64> for Param {
@@ -191,7 +196,7 @@ mod tests {
         let param: Param = lfo.into();
         match param {
             Param::Fixed(_) => panic!("Expected Signal, got Fixed"),
-            Param::Signal(_) => {}, // Success
+            Param::Signal(_) => {} // Success
         }
     }
 
@@ -202,7 +207,7 @@ mod tests {
         let constant = ConstantSignal(0.75);
         let param: Param = constant.into();
         match param {
-            Param::Signal(_) => {}, // Success - ConstantSignal is a Signal
+            Param::Signal(_) => {} // Success - ConstantSignal is a Signal
             Param::Fixed(_) => panic!("Unexpected Fixed variant"),
         }
     }

@@ -677,4 +677,5 @@ mod tests {
         let mut signal = a.add(b).gain(0.5).clamp(0.0, 1.0);
         assert_eq!(signal.next_sample(), 1.0);
     }
+
 }
