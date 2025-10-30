@@ -1,7 +1,7 @@
 //! Square wave oscillator implementation.
 
-use super::{AudioSignal, Oscillator, PulseOscillator};
-use crate::Signal;
+use super::{Oscillator, PulseOscillator};
+use crate::{AudioSignal, Signal};
 
 /// A square wave oscillator for audio synthesis.
 ///

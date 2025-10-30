@@ -1,7 +1,7 @@
 //! Triangle wave oscillator implementation.
 
-use super::{AudioSignal, Oscillator};
-use crate::Signal;
+use super::Oscillator;
+use crate::{AudioSignal, Signal};
 
 /// A triangle wave oscillator for audio synthesis.
 ///

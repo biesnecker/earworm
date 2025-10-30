@@ -1,7 +1,7 @@
 //! Sawtooth wave oscillator implementation.
 
-use super::{AudioSignal, Oscillator};
-use crate::Signal;
+use super::Oscillator;
+use crate::{AudioSignal, Signal};
 
 /// A sawtooth wave oscillator for audio synthesis.
 ///

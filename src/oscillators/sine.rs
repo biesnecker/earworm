@@ -1,7 +1,7 @@
 //! Sine wave oscillator implementation.
 
-use super::{AudioSignal, Oscillator};
-use crate::Signal;
+use super::Oscillator;
+use crate::{AudioSignal, Signal};
 use std::f64::consts::PI;
 
 /// A simple sine wave oscillator for audio synthesis.

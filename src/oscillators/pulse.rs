@@ -1,7 +1,7 @@
 //! Pulse wave oscillator with modulating duty cycle.
 
-use super::{AudioSignal, Oscillator};
-use crate::{Param, Signal};
+use super::Oscillator;
+use crate::{AudioSignal, Param, Signal};
 
 /// A pulse wave oscillator with variable duty cycle.
 ///

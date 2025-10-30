@@ -7,7 +7,7 @@ pub mod envelopes;
 pub mod filters;
 pub mod noise;
 pub mod oscillators;
-mod signal;
+pub mod signals;
 
 // Re-export commonly used types at the crate root
 pub use combinators::{
@@ -18,7 +18,7 @@ pub use envelopes::{Curve, ADSR};
 pub use filters::{BiquadFilter, FilterType};
 pub use noise::{PinkNoise, WhiteNoise};
 pub use oscillators::{
-    AudioSignal, AudioSignalExt, Oscillator, PulseOscillator, SawtoothOscillator, SineOscillator,
+    Oscillator, PulseOscillator, SawtoothOscillator, SineOscillator,
     SquareOscillator, TriangleOscillator,
 };
-pub use signal::{ConstantSignal, Param, Signal};
+pub use signals::{AudioSignal, AudioSignalExt, ConstantSignal, Param, Signal};
