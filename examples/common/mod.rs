@@ -11,7 +11,7 @@ use crossterm::{
     },
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use std::io::stdout;
+use std::io::{Write, stdout};
 use std::panic;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -20,6 +20,13 @@ use std::time::Duration;
 /// Types implementing this trait can be used as audio sources in interactive examples.
 pub trait ExampleAudioState: Send + 'static {
     fn next_sample(&mut self) -> f64;
+
+    /// Optional output/metrics information to display in the UI.
+    /// Return None to hide the output line, or Some(String) to show it.
+    /// This is called periodically from the UI thread, not the audio thread.
+    fn output_info(&self) -> Option<String> {
+        None
+    }
 }
 
 /// Configuration for keyboard enhancements (needed for detecting key press/release).
@@ -140,8 +147,10 @@ where
     // Draw initial UI
     initial_ui(&state)?;
 
-    // Event loop
+    // Event loop with periodic output info updates
+    let mut last_output_update = std::time::Instant::now();
     loop {
+        // Poll for keyboard events
         if event::poll(Duration::from_millis(50))?
             && let Event::Key(key_event) = event::read()?
         {
@@ -149,6 +158,23 @@ where
                 KeyAction::Continue => {}
                 KeyAction::Exit => break,
             }
+        }
+
+        // Periodically update output info display (if provided)
+        if last_output_update.elapsed() >= Duration::from_millis(100) {
+            let state_guard = state.lock().unwrap();
+            if let Some(info) = state_guard.output_info() {
+                // Move to second line and display output info
+                let mut stdout = stdout();
+                stdout.execute(crossterm::cursor::MoveTo(0, 1))?;
+                stdout.execute(crossterm::terminal::Clear(
+                    crossterm::terminal::ClearType::CurrentLine,
+                ))?;
+                write!(stdout, "{}", info)?;
+                stdout.flush()?;
+            }
+            drop(state_guard);
+            last_output_update = std::time::Instant::now();
         }
     }
 
