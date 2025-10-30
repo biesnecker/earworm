@@ -5,6 +5,8 @@
 
 mod bitcrusher;
 mod delay;
+mod tremolo;
 
 pub use bitcrusher::Bitcrusher;
 pub use delay::Delay;
+pub use tremolo::Tremolo;

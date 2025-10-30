@@ -15,7 +15,7 @@ pub use combinators::{
     Abs, Add, Clamp, Crossfade, Gain, Gate, Invert, Map, Max, Min, Mix2, Mix3, Mix4, Multiply,
     Offset, SignalExt,
 };
-pub use effects::Delay;
+pub use effects::{Delay, Tremolo};
 pub use envelopes::{ADSR, Curve};
 pub use filters::{BiquadFilter, FilterType};
 pub use noise::{PinkNoise, WhiteNoise};

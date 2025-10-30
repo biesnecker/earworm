@@ -175,6 +175,31 @@ pub trait AudioSignalExt<const SAMPLE_RATE: u32>: AudioSignal<SAMPLE_RATE> + Siz
     ) -> crate::filters::BiquadFilter<SAMPLE_RATE, Self> {
         crate::filters::BiquadFilter::allpass(self, frequency, q)
     }
+
+    /// Applies a tremolo effect (amplitude modulation) to this audio signal.
+    ///
+    /// Tremolo creates a rhythmic variation in volume using an LFO to modulate amplitude.
+    ///
+    /// # Arguments
+    ///
+    /// * `rate` - Tremolo rate in Hz (typically 3-10 Hz for classic tremolo)
+    /// * `depth` - Modulation depth, 0.0-1.0 (0.0 = no effect, 1.0 = full tremolo)
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use earworm::{SineOscillator, AudioSignalExt};
+    ///
+    /// let osc = SineOscillator::<44100>::new(440.0);
+    /// let mut tremolo = osc.tremolo(5.0, 0.5);
+    /// ```
+    fn tremolo(
+        self,
+        rate: f64,
+        depth: impl Into<Param>,
+    ) -> crate::effects::Tremolo<SAMPLE_RATE, Self> {
+        crate::effects::Tremolo::with_rate(self, rate, depth)
+    }
 }
 
 // Blanket implementation for all AudioSignal types
