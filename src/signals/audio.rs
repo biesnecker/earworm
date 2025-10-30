@@ -43,7 +43,7 @@ pub trait AudioSignal<const SAMPLE_RATE: u32>: Signal {
 /// ```
 /// use earworm::{SineOscillator, AudioSignalExt};
 ///
-/// let osc = SineOscillator::new(440.0, 44100.0);
+/// let osc = SineOscillator::<44100>::new(440.0);
 /// // No need to pass sample_rate - it's automatically obtained from the AudioSignal
 /// let mut filtered = osc.lowpass_filter(1000.0, 0.707);
 /// ```
@@ -62,7 +62,7 @@ pub trait AudioSignalExt<const SAMPLE_RATE: u32>: AudioSignal<SAMPLE_RATE> + Siz
     /// ```
     /// use earworm::{SineOscillator, AudioSignalExt};
     ///
-    /// let osc = SineOscillator::new(440.0, 44100.0);
+    /// let osc = SineOscillator::<44100>::new(440.0);
     /// let mut filtered = osc.lowpass_filter(1000.0, 0.707);
     /// ```
     fn lowpass_filter(
@@ -87,7 +87,7 @@ pub trait AudioSignalExt<const SAMPLE_RATE: u32>: AudioSignal<SAMPLE_RATE> + Siz
     /// ```
     /// use earworm::{SineOscillator, AudioSignalExt};
     ///
-    /// let osc = SineOscillator::new(440.0, 44100.0);
+    /// let osc = SineOscillator::<44100>::new(440.0);
     /// let mut filtered = osc.highpass_filter(100.0, 0.707);
     /// ```
     fn highpass_filter(
@@ -112,7 +112,7 @@ pub trait AudioSignalExt<const SAMPLE_RATE: u32>: AudioSignal<SAMPLE_RATE> + Siz
     /// ```
     /// use earworm::{SineOscillator, AudioSignalExt};
     ///
-    /// let osc = SineOscillator::new(440.0, 44100.0);
+    /// let osc = SineOscillator::<44100>::new(440.0);
     /// let mut filtered = osc.bandpass_filter(440.0, 5.0);
     /// ```
     fn bandpass_filter(
@@ -137,7 +137,7 @@ pub trait AudioSignalExt<const SAMPLE_RATE: u32>: AudioSignal<SAMPLE_RATE> + Siz
     /// ```
     /// use earworm::{SineOscillator, AudioSignalExt};
     ///
-    /// let osc = SineOscillator::new(440.0, 44100.0);
+    /// let osc = SineOscillator::<44100>::new(440.0);
     /// let mut filtered = osc.notch_filter(440.0, 5.0);
     /// ```
     fn notch_filter(
@@ -165,7 +165,7 @@ pub trait AudioSignalExt<const SAMPLE_RATE: u32>: AudioSignal<SAMPLE_RATE> + Siz
     /// ```
     /// use earworm::{SineOscillator, AudioSignalExt};
     ///
-    /// let osc = SineOscillator::new(440.0, 44100.0);
+    /// let osc = SineOscillator::<44100>::new(440.0);
     /// let mut filtered = osc.allpass_filter(1000.0, 0.707);
     /// ```
     fn allpass_filter(

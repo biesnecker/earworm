@@ -89,12 +89,12 @@ impl<const SAMPLE_RATE: u32> crate::AudioSignal<SAMPLE_RATE> for ConstantSignal<
 /// assert_eq!(fixed_param.value(), 0.5);
 ///
 /// // Modulated parameter using Into
-/// let lfo = SineOscillator::new(2.0, 44100.0);
+/// let lfo = SineOscillator::<44100>::new(2.0);
 /// let mut modulated_param: Param = lfo.into();
 /// let value = modulated_param.value(); // Gets next sample from LFO
 ///
 /// // Or explicitly with Param::modulated()
-/// let lfo2 = SineOscillator::new(2.0, 44100.0);
+/// let lfo2 = SineOscillator::<44100>::new(2.0);
 /// let mut modulated_param2 = Param::modulated(lfo2);
 /// ```
 pub enum Param {
