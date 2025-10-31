@@ -166,7 +166,10 @@
 //! - Each voice maintains independent state (phase, envelope position, etc.)
 //! - Signal mixing is done in next_sample() - no separate mixing buffer needed
 
-use super::{envelope::Envelope, voice::Voice};
+use super::{
+    envelope::{Envelope, EnvelopeState},
+    voice::Voice,
+};
 use crate::{AudioSignal, Pitched, Signal};
 
 /// Voice stealing strategy for when all voices are active.
@@ -478,21 +481,41 @@ where
     }
 
     /// Finds the quietest voice (lowest envelope level).
-    ///
-    /// Note: This requires adding a method to get envelope level,
-    /// which will be implemented as part of the envelope trait enhancement.
-    /// For now, falls back to oldest voice strategy.
     fn find_quietest_voice(&self) -> usize {
-        // TODO: Implement when envelope level query is available
-        // For now, fall back to oldest
-        self.find_oldest_voice()
+        self.voices
+            .iter()
+            .enumerate()
+            .min_by(|(_, a), (_, b)| {
+                a.voice
+                    .envelope_level()
+                    .partial_cmp(&b.voice.envelope_level())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|(idx, _)| idx)
+            .unwrap() // Safe because VOICES > 0
     }
 
     /// Finds a voice in release phase, or falls back to oldest.
     fn find_released_or_oldest_voice(&self) -> usize {
-        // TODO: Implement when envelope state query is available
-        // For now, fall back to oldest
-        self.find_oldest_voice()
+        // Find all voices in release phase
+        let released_voices: Vec<(usize, &VoiceState<SAMPLE_RATE, S, E>)> = self
+            .voices
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| v.voice.envelope_state() == EnvelopeState::Release)
+            .collect();
+
+        if !released_voices.is_empty() {
+            // Steal the oldest voice in release phase
+            released_voices
+                .iter()
+                .min_by_key(|(_, v)| v.age)
+                .map(|(idx, _)| *idx)
+                .unwrap()
+        } else {
+            // No voices in release, fall back to oldest
+            self.find_oldest_voice()
+        }
     }
 }
 

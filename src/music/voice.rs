@@ -1,6 +1,9 @@
 //! Voice - a combination of a pitched signal and an envelope.
 
-use super::{envelope::Envelope, frequency::Frequency};
+use super::{
+    envelope::{Envelope, EnvelopeState},
+    frequency::Frequency,
+};
 use crate::{AudioSignal, Pitched, Signal};
 
 /// A voice combines a pitched signal source with an envelope.
@@ -170,6 +173,56 @@ where
     /// ```
     pub fn is_active(&self) -> bool {
         self.envelope.is_active()
+    }
+
+    /// Returns the current envelope level.
+    ///
+    /// This is useful for voice stealing strategies that need to compare
+    /// envelope levels across voices.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use earworm::{ADSR, SineOscillator};
+    /// use earworm::music::{Voice, envelope::Envelope};
+    ///
+    /// const SAMPLE_RATE: u32 = 44100;
+    ///
+    /// let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
+    /// let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
+    /// let mut voice = Voice::new(osc, env);
+    ///
+    /// assert_eq!(voice.envelope_level(), 0.0);
+    /// voice.note_on(440.0, 0.8);
+    /// // Level will increase during attack phase
+    /// ```
+    pub fn envelope_level(&self) -> f64 {
+        self.envelope.level()
+    }
+
+    /// Returns the current envelope state.
+    ///
+    /// This is useful for voice stealing strategies that prefer voices
+    /// in certain states (e.g., preferring voices in release phase).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use earworm::{ADSR, SineOscillator};
+    /// use earworm::music::{Voice, envelope::{Envelope, EnvelopeState}};
+    ///
+    /// const SAMPLE_RATE: u32 = 44100;
+    ///
+    /// let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
+    /// let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
+    /// let mut voice = Voice::new(osc, env);
+    ///
+    /// assert_eq!(voice.envelope_state(), EnvelopeState::Idle);
+    /// voice.note_on(440.0, 0.8);
+    /// assert_eq!(voice.envelope_state(), EnvelopeState::Attack);
+    /// ```
+    pub fn envelope_state(&self) -> EnvelopeState {
+        self.envelope.state()
     }
 }
 

@@ -1,5 +1,22 @@
 //! Envelope trait for musical performance.
 
+/// Common envelope states.
+///
+/// This enum represents the typical states an envelope can be in during its lifecycle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EnvelopeState {
+    /// Envelope is not active
+    Idle,
+    /// Attack phase - ramping up to peak
+    Attack,
+    /// Decay phase - ramping down from peak to sustain
+    Decay,
+    /// Sustain phase - holding at sustain level
+    Sustain,
+    /// Release phase - ramping down to zero
+    Release,
+}
+
 /// Trait for envelope generators with lifecycle control.
 ///
 /// Envelopes control parameters over time in response to musical events (note on/off).
@@ -59,4 +76,24 @@ pub trait Envelope {
     ///
     /// The current envelope level, typically in the range [0.0, 1.0]
     fn next_sample(&mut self) -> f64;
+
+    /// Returns the current envelope level without advancing the state.
+    ///
+    /// This is useful for voice stealing strategies that need to compare
+    /// envelope levels (e.g., stealing the quietest voice).
+    ///
+    /// # Returns
+    ///
+    /// The current envelope level, typically in the range [0.0, 1.0]
+    fn level(&self) -> f64;
+
+    /// Returns the current envelope state.
+    ///
+    /// This is useful for voice stealing strategies that prefer voices
+    /// in certain states (e.g., preferring voices in release phase).
+    ///
+    /// # Returns
+    ///
+    /// The current `EnvelopeState`
+    fn state(&self) -> EnvelopeState;
 }

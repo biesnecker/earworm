@@ -1,22 +1,7 @@
 //! ADSR (Attack, Decay, Sustain, Release) envelope generator.
 
-use super::envelope::Envelope;
+use super::envelope::{Envelope, EnvelopeState};
 use crate::synthesis::envelopes::Curve;
-
-/// State of the ADSR envelope.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum EnvelopeState {
-    /// Envelope is not active
-    Idle,
-    /// Ramping from 0 to peak level
-    Attack,
-    /// Ramping from peak to sustain level
-    Decay,
-    /// Holding at sustain level
-    Sustain,
-    /// Ramping from current level to 0
-    Release,
-}
 
 /// ADSR (Attack, Decay, Sustain, Release) envelope generator.
 ///
@@ -181,12 +166,6 @@ impl ADSR {
         self.current_level = 0.0;
         self.release_start_level = 0.0;
     }
-
-    /// Gets the current envelope state (for debugging/testing).
-    #[cfg(test)]
-    fn state(&self) -> EnvelopeState {
-        self.state
-    }
 }
 
 impl Envelope for ADSR {
@@ -206,6 +185,14 @@ impl Envelope for ADSR {
 
     fn is_active(&self) -> bool {
         !matches!(self.state, EnvelopeState::Idle)
+    }
+
+    fn level(&self) -> f64 {
+        self.current_level
+    }
+
+    fn state(&self) -> EnvelopeState {
+        self.state
     }
 
     fn next_sample(&mut self) -> f64 {
@@ -293,6 +280,7 @@ impl Envelope for ADSR {
 
 #[cfg(test)]
 mod tests {
+    use super::super::envelope::EnvelopeState;
     use super::*;
 
     const SAMPLE_RATE: f64 = 100.0;
