@@ -12,6 +12,7 @@
 /// The trait provides two fundamental operations:
 /// - Single sample generation via `next_sample()`
 /// - Batch processing via `process()`
+/// - Iterator adapter via `iter()`
 pub trait Signal {
     /// Generates the next sample from the signal.
     ///
@@ -32,6 +33,55 @@ pub trait Signal {
         for sample in buffer.iter_mut() {
             *sample = self.next_sample();
         }
+    }
+
+    /// Returns an iterator adapter over this signal.
+    ///
+    /// This allows using iterator methods like `.take()`, `.map()`, `.collect()`, etc.
+    /// Note that audio signals are infinite, so they will always return `Some(sample)`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use earworm::{Signal, SineOscillator};
+    ///
+    /// let mut osc = SineOscillator::<44100>::new(440.0);
+    ///
+    /// // Collect 100 samples into a Vec
+    /// let samples: Vec<f64> = osc.iter().take(100).collect();
+    /// assert_eq!(samples.len(), 100);
+    ///
+    /// // Use with iterator combinators
+    /// let scaled: Vec<f64> = osc.iter().take(10).map(|s| s * 0.5).collect();
+    /// ```
+    fn iter(&mut self) -> SignalIterator<'_, Self>
+    where
+        Self: Sized,
+    {
+        SignalIterator { signal: self }
+    }
+}
+
+/// Iterator adapter for `Signal` types.
+///
+/// This type is returned by `Signal::iter()` and implements `Iterator`,
+/// allowing signals to be used with standard iterator combinators.
+///
+/// Since audio signals are conceptually infinite streams, this iterator
+/// will always return `Some(sample)` and never `None`.
+pub struct SignalIterator<'a, S: ?Sized> {
+    signal: &'a mut S,
+}
+
+impl<'a, S: Signal + ?Sized> Iterator for SignalIterator<'a, S> {
+    type Item = f64;
+
+    fn next(&mut self) -> Option<f64> {
+        Some(self.signal.next_sample())
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (usize::MAX, None) // Infinite iterator
     }
 }
 
@@ -247,5 +297,66 @@ mod tests {
             Param::Signal(_) => {} // Success - ConstantSignal is a Signal
             Param::Fixed(_) => panic!("Unexpected Fixed variant"),
         }
+    }
+
+    #[test]
+    fn test_signal_iterator_basic() {
+        let mut constant = ConstantSignal::<44100>(0.5);
+        let samples: Vec<f64> = constant.iter().take(5).collect();
+        assert_eq!(samples, vec![0.5, 0.5, 0.5, 0.5, 0.5]);
+    }
+
+    #[test]
+    fn test_signal_iterator_with_map() {
+        let mut constant = ConstantSignal::<44100>(1.0);
+        let samples: Vec<f64> = constant.iter().take(3).map(|s| s * 2.0).collect();
+        assert_eq!(samples, vec![2.0, 2.0, 2.0]);
+    }
+
+    #[test]
+    fn test_signal_iterator_with_oscillator() {
+        use crate::SineOscillator;
+        let mut osc = SineOscillator::<44100>::new(440.0);
+
+        // Collect some samples
+        let samples: Vec<f64> = osc.iter().take(10).collect();
+        assert_eq!(samples.len(), 10);
+
+        // Verify they're in the expected range for a sine wave
+        for sample in samples {
+            assert!((-1.0..=1.0).contains(&sample));
+        }
+    }
+
+    #[test]
+    fn test_signal_iterator_size_hint() {
+        let mut constant = ConstantSignal::<44100>(0.5);
+        let mut iter = constant.iter();
+
+        // Should indicate infinite iterator
+        let (lower, upper) = iter.size_hint();
+        assert_eq!(lower, usize::MAX);
+        assert_eq!(upper, None);
+
+        // Size hint shouldn't change after calling next
+        iter.next();
+        let (lower, upper) = iter.size_hint();
+        assert_eq!(lower, usize::MAX);
+        assert_eq!(upper, None);
+    }
+
+    #[test]
+    fn test_signal_iterator_chain() {
+        let mut constant = ConstantSignal::<44100>(1.0);
+
+        // Test chaining multiple iterator operations
+        let result: f64 = constant
+            .iter()
+            .take(100)
+            .map(|s| s * 2.0)
+            .filter(|s| *s > 1.5)
+            .sum();
+
+        assert_eq!(result, 200.0); // 100 samples * 2.0 each
     }
 }

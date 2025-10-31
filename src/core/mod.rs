@@ -18,4 +18,4 @@ pub use combinators::{
     Abs, Add, Clamp, Crossfade, Gain, Gate, Invert, Map, Max, Min, Mix2, Mix3, Mix4, Multiply,
     Offset, SignalExt,
 };
-pub use signal::{ConstantSignal, Param, Pitched, Signal};
+pub use signal::{ConstantSignal, Param, Pitched, Signal, SignalIterator};

@@ -98,6 +98,12 @@ impl OscillatorWrapper {
             OscillatorType::WavetableHarmonics => {
                 // Additive synthesis: fundamental + 2nd + 3rd + 5th harmonics
                 // Creates a bright, harmonic-rich sound
+                //
+                // Alternative approach using Signal::iter():
+                // let samples: Vec<f64> = SineOscillator::<SAMPLE_RATE>::new(...)
+                //     .iter().take(1024).map(|s| /* process */).collect();
+                // WavetableOscillator::from_samples(frequency, samples)
+
                 OscillatorWrapper::WavetableHarmonics(
                     WavetableOscillator::<SAMPLE_RATE>::from_function(frequency, 1024, |phase| {
                         let p = phase * 2.0 * PI;
@@ -126,20 +132,33 @@ impl OscillatorWrapper {
             }
             OscillatorType::WavetableVowel => {
                 // Vowel formant simulation (approximating 'ah' sound)
-                // Uses formant peaks at specific harmonic regions
-                OscillatorWrapper::WavetableVowel(
-                    WavetableOscillator::<SAMPLE_RATE>::from_function(frequency, 2048, |phase| {
-                        let p = phase * 2.0 * PI;
-                        // Simplified formant structure
-                        (p.sin() + // F0
-                         0.6 * (2.0 * p).sin() + // F1 region (low)
-                         0.4 * (3.0 * p).sin() +
-                         0.7 * (6.0 * p).sin() + // F2 region (mid)
-                         0.3 * (8.0 * p).sin() +
-                         0.2 * (12.0 * p).sin()) // F3 region (high)
-                            / 3.2 // Normalize
+                // Demonstrates using Signal::iter() to generate wavetables from oscillators
+
+                // Create multiple oscillators for different formants
+                let mut f0 = SineOscillator::<SAMPLE_RATE>::new(1.0); // Fundamental
+                let mut f1_a = SineOscillator::<SAMPLE_RATE>::new(2.0);
+                let mut f1_b = SineOscillator::<SAMPLE_RATE>::new(3.0);
+                let mut f2_a = SineOscillator::<SAMPLE_RATE>::new(6.0);
+                let mut f2_b = SineOscillator::<SAMPLE_RATE>::new(8.0);
+                let mut f3 = SineOscillator::<SAMPLE_RATE>::new(12.0);
+
+                // Generate and combine using iterator API
+                let samples: Vec<f64> = f0
+                    .iter()
+                    .zip(f1_a.iter())
+                    .zip(f1_b.iter())
+                    .zip(f2_a.iter())
+                    .zip(f2_b.iter())
+                    .zip(f3.iter())
+                    .take(2048)
+                    .map(|(((((s0, s1a), s1b), s2a), s2b), s3)| {
+                        (s0 + 0.6 * s1a + 0.4 * s1b + 0.7 * s2a + 0.3 * s2b + 0.2 * s3) / 3.2
                     })
-                    .with_interpolation(InterpolationMode::Cubic),
+                    .collect();
+
+                OscillatorWrapper::WavetableVowel(
+                    WavetableOscillator::<SAMPLE_RATE>::from_samples(frequency, samples)
+                        .with_interpolation(InterpolationMode::Cubic),
                 )
             }
         }

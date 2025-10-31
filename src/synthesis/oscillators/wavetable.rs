@@ -128,6 +128,9 @@ use crate::core::Pitched;
 use crate::{AudioSignal, Signal};
 use std::f64::consts::PI;
 
+#[cfg(feature = "wavetable-loader")]
+use std::path::Path;
+
 /// Interpolation mode for wavetable playback.
 ///
 /// Determines how fractional positions between wavetable samples are handled.
@@ -379,6 +382,83 @@ impl<const SAMPLE_RATE: u32> WavetableOscillator<SAMPLE_RATE> {
     /// Gets the size of the wavetable.
     pub fn table_size(&self) -> usize {
         self.table.len()
+    }
+
+    /// Loads a wavetable from a WAV file (requires `wavetable-loader` feature).
+    ///
+    /// Reads the first channel of a mono or stereo WAV file and uses the samples
+    /// as a wavetable. The audio data is automatically normalized to [-1.0, 1.0].
+    ///
+    /// # Arguments
+    ///
+    /// * `frequency` - Initial playback frequency in Hz
+    /// * `path` - Path to the WAV file
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(WavetableOscillator)` on success, or an error if the file
+    /// cannot be read or is not a valid WAV file.
+    ///
+    /// # Notes
+    ///
+    /// - The entire file is loaded into memory as the wavetable
+    /// - For single-cycle waveforms, use short WAV files (one cycle)
+    /// - For longer samples, this will create a looping wavetable
+    /// - Sample rate conversion is not performed - the file is read as-is
+    /// - Multi-channel files will only use the first channel
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use earworm::WavetableOscillator;
+    ///
+    /// // Load a single-cycle waveform
+    /// let osc = WavetableOscillator::<44100>::from_wav_file(
+    ///     440.0,
+    ///     "waveforms/saw.wav"
+    /// )?;
+    /// ```
+    #[cfg(feature = "wavetable-loader")]
+    pub fn from_wav_file<P: AsRef<Path>>(
+        frequency: f64,
+        path: P,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        let mut reader = hound::WavReader::open(path)?;
+        let spec = reader.spec();
+
+        // Read all samples from the first channel
+        let samples: Result<Vec<f64>, _> = match spec.sample_format {
+            hound::SampleFormat::Float => reader
+                .samples::<f32>()
+                .map(|s| s.map(|v| v as f64))
+                .collect(),
+            hound::SampleFormat::Int => {
+                let max_value = (1 << (spec.bits_per_sample - 1)) as f64;
+                reader
+                    .samples::<i32>()
+                    .map(|s| s.map(|v| v as f64 / max_value))
+                    .collect()
+            }
+        };
+
+        let samples = samples?;
+
+        if samples.is_empty() {
+            return Err("WAV file contains no samples".into());
+        }
+
+        // For multi-channel files, we only take every Nth sample (first channel)
+        let channel_samples: Vec<f64> = if spec.channels > 1 {
+            samples
+                .iter()
+                .step_by(spec.channels as usize)
+                .copied()
+                .collect()
+        } else {
+            samples
+        };
+
+        Ok(Self::from_samples(frequency, channel_samples))
     }
 
     /// Reads a sample from the wavetable at the current phase using the configured interpolation.

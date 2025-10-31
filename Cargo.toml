@@ -10,15 +10,18 @@ edition = "2024"
 default = ["synth"]
 synth = []
 music = ["synth", "earworm-macros"]
+wavetable-loader = ["synth", "hound"]
 
 [dependencies]
 rand = "0.8"
 earworm-macros = { path = "earworm-macros", optional = true }
+hound = { version = "3.5", optional = true }
 
 [dev-dependencies]
 cpal = "0.15"
 anyhow = "1.0"
 crossterm = "0.28"
+hound = "3.5"
 cargo-husky = { version = "1.5.0", features = ["precommit-hook", "run-cargo-test", "run-cargo-clippy", "run-cargo-fmt"] }
 
 # Examples that require specific features
@@ -37,3 +40,7 @@ required-features = ["music"]
 [[example]]
 name = "envelope_demo"
 required-features = ["music"]
+
+[[example]]
+name = "wavetable_from_wav"
+required-features = ["wavetable-loader"]

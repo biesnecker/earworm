@@ -22,7 +22,7 @@ pub mod music;
 // Re-export core types at the crate root (always available)
 pub use core::{
     Abs, Add, AudioSignal, Clamp, ConstantSignal, Crossfade, Gain, Gate, Invert, Map, Max, Min,
-    Mix2, Mix3, Mix4, Multiply, Offset, Param, Pitched, Signal, SignalExt,
+    Mix2, Mix3, Mix4, Multiply, Offset, Param, Pitched, Signal, SignalExt, SignalIterator,
 };
 
 // Re-export synthesis types (only with synth feature)
