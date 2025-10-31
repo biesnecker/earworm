@@ -36,7 +36,8 @@ pub use synthesis::{
 // Re-export music types (only with music feature)
 #[cfg(feature = "music")]
 pub use music::{
-    ADSR, Envelope, Voice,
+    ADSR, AHD, AR, Envelope, EnvelopeState, Metronome, Pattern, PlayState, Sequencer,
+    StealingStrategy, Voice, VoiceAllocator,
     core::{Note, NoteEvent, ParseError, Pitch},
 };
 

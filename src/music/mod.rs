@@ -1,15 +1,21 @@
 mod adsr;
+mod ahd;
 mod allocator;
+mod ar;
 pub mod core;
 pub mod envelope;
 pub mod frequency;
 mod metronome;
 mod pattern;
+mod sequencer;
 mod voice;
 
 pub use adsr::ADSR;
+pub use ahd::AHD;
 pub use allocator::{StealingStrategy, VoiceAllocator};
+pub use ar::AR;
 pub use envelope::{Envelope, EnvelopeState};
 pub use metronome::Metronome;
 pub use pattern::Pattern;
+pub use sequencer::{PlayState, Sequencer};
 pub use voice::Voice;

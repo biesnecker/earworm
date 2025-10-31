@@ -224,6 +224,31 @@ where
     pub fn envelope_state(&self) -> EnvelopeState {
         self.envelope.state()
     }
+
+    /// Returns true if the voice's envelope is in its final decay/release phase.
+    ///
+    /// This is a wrapper around the envelope's `is_releasing()` method, useful
+    /// for voice stealing strategies.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use earworm::music::{Voice, ADSR, Envelope};
+    /// use earworm::SawtoothOscillator;
+    ///
+    /// let osc = SawtoothOscillator::<44100>::new(440.0);
+    /// let env = ADSR::new(0.01, 0.1, 0.7, 0.2, 44100.0);
+    /// let mut voice = Voice::new(osc, env);
+    ///
+    /// voice.note_on(440.0, 0.8);
+    /// assert!(!voice.is_releasing()); // In attack phase
+    ///
+    /// voice.note_off();
+    /// assert!(voice.is_releasing()); // In release phase
+    /// ```
+    pub fn is_releasing(&self) -> bool {
+        self.envelope.is_releasing()
+    }
 }
 
 impl<const SAMPLE_RATE: u32, S, E> Signal for Voice<SAMPLE_RATE, S, E>

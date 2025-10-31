@@ -96,4 +96,23 @@ pub trait Envelope {
     ///
     /// The current `EnvelopeState`
     fn state(&self) -> EnvelopeState;
+
+    /// Returns true if the envelope is in its final decay phase (releasing).
+    ///
+    /// This is useful for voice stealing - voices that are releasing can be
+    /// stolen with lower priority. Different envelope types have different
+    /// concepts of "releasing":
+    /// - ADSR: Release state
+    /// - AHD: Decay state
+    /// - AR: Release state
+    ///
+    /// Default implementation checks for Release state, but envelope
+    /// implementations can override this for their specific final phase.
+    ///
+    /// # Returns
+    ///
+    /// True if the envelope is in its final decay/release phase
+    fn is_releasing(&self) -> bool {
+        matches!(self.state(), EnvelopeState::Release)
+    }
 }

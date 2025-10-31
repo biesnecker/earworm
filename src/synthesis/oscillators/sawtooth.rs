@@ -13,6 +13,7 @@ use crate::{AudioSignal, Signal};
 /// # Type Parameters
 ///
 /// * `SAMPLE_RATE` - Sample rate in Hz (e.g., 44100 for CD quality)
+#[derive(Clone)]
 pub struct SawtoothOscillator<const SAMPLE_RATE: u32> {
     /// Current phase of the oscillator (0.0 to 1.0)
     phase: f64,

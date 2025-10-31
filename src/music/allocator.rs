@@ -166,10 +166,7 @@
 //! - Each voice maintains independent state (phase, envelope position, etc.)
 //! - Signal mixing is done in next_sample() - no separate mixing buffer needed
 
-use super::{
-    envelope::{Envelope, EnvelopeState},
-    voice::Voice,
-};
+use super::{envelope::Envelope, voice::Voice};
 use crate::{AudioSignal, Pitched, Signal};
 
 /// Voice stealing strategy for when all voices are active.
@@ -497,23 +494,23 @@ where
 
     /// Finds a voice in release phase, or falls back to oldest.
     fn find_released_or_oldest_voice(&self) -> usize {
-        // Find all voices in release phase
+        // Find all voices in their final decay/release phase
         let released_voices: Vec<(usize, &VoiceState<SAMPLE_RATE, S, E>)> = self
             .voices
             .iter()
             .enumerate()
-            .filter(|(_, v)| v.voice.envelope_state() == EnvelopeState::Release)
+            .filter(|(_, v)| v.voice.is_releasing())
             .collect();
 
         if !released_voices.is_empty() {
-            // Steal the oldest voice in release phase
+            // Steal the oldest voice in release/decay phase
             released_voices
                 .iter()
                 .min_by_key(|(_, v)| v.age)
                 .map(|(idx, _)| *idx)
                 .unwrap()
         } else {
-            // No voices in release, fall back to oldest
+            // No voices releasing, fall back to oldest
             self.find_oldest_voice()
         }
     }
