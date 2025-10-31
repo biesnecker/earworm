@@ -27,15 +27,11 @@ mod common;
 
 use anyhow::Result;
 use common::{
-    ExampleAudioState, KeyAction, KeyboardConfig, is_quit_key, key_to_midi_note, midi_note_to_name,
-    run_interactive_example,
+    ExampleAudioState, KeyAction, KeyboardConfig, draw_keyboard_ui, is_quit_key, key_to_midi_note,
+    midi_note_to_name, run_interactive_example,
 };
-use crossterm::{
-    ExecutableCommand,
-    event::{KeyEvent, KeyEventKind},
-};
+use crossterm::event::{KeyEvent, KeyEventKind};
 use earworm::{ADSR, Signal, SineOscillator, music::Voice};
-use std::io::{Write, stdout};
 
 const SAMPLE_RATE: u32 = 44100;
 
@@ -98,25 +94,7 @@ impl ExampleAudioState for VoiceDemoState {
 }
 
 fn draw_ui() -> Result<()> {
-    let mut stdout = stdout();
-    stdout.execute(crossterm::terminal::Clear(
-        crossterm::terminal::ClearType::All,
-    ))?;
-    stdout.execute(crossterm::cursor::MoveTo(0, 0))?;
-    write!(
-        stdout,
-        "Voice Demo - Monophonic Synthesizer\n\
-         \n\
-         Keyboard Layout:\n\
-         W E   T Y U   O P   (Black keys)\n\
-          ↓ ↓   ↓ ↓ ↓   ↓ ↓\n\
-         A S D F G H J K L   (White keys)\n\
-         C D E F G A B C D   (Notes)\n\
-         \n\
-         Q/ESC = Quit"
-    )?;
-    stdout.flush()?;
-    Ok(())
+    draw_keyboard_ui("Voice Demo - Monophonic Synthesizer", None)
 }
 
 fn main() -> Result<()> {
@@ -135,13 +113,19 @@ fn main() -> Result<()> {
                 KeyEventKind::Press => {
                     if let Some(midi_note) = key_to_midi_note(key_event.code) {
                         let mut s = state.lock().unwrap();
-                        s.note_on(midi_note);
+                        // Only trigger note_on if this is a new note (prevent key repeat retriggering)
+                        if s.current_note != Some(midi_note) {
+                            s.note_on(midi_note);
+                        }
                     }
                 }
                 KeyEventKind::Release => {
-                    if key_to_midi_note(key_event.code).is_some() {
+                    if let Some(released_note) = key_to_midi_note(key_event.code) {
                         let mut s = state.lock().unwrap();
-                        s.note_off();
+                        // Only trigger note_off if the released key matches the currently playing note
+                        if s.current_note == Some(released_note) {
+                            s.note_off();
+                        }
                     }
                 }
                 _ => {}

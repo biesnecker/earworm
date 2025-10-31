@@ -320,3 +320,71 @@ pub fn midi_note_to_name(midi_note: u8) -> String {
 
     format!("{}{}", NOTE_NAMES[note_index], octave)
 }
+
+/// Draws a standard keyboard layout UI for musical examples.
+///
+/// This function renders a consistent keyboard reference that shows the piano-style
+/// layout mapping computer keys to musical notes. It's designed to work with the
+/// common example framework's status line (which appears on line 1).
+///
+/// # Arguments
+///
+/// * `title` - The title to display at the top of the UI
+/// * `extra_info` - Optional additional information to show (e.g., controls, instructions)
+///
+/// # UI Layout
+///
+/// The function renders:
+/// - Line 0: Title
+/// - Line 1: (Reserved for status updates from `output_info()`)
+/// - Lines 2+: Keyboard layout diagram
+/// - Bottom: Extra info (if provided) and quit instructions
+///
+/// # Examples
+///
+/// ```no_run
+/// use common::draw_keyboard_ui;
+///
+/// // Simple usage
+/// draw_keyboard_ui("My Synth Demo", None)?;
+///
+/// // With extra controls
+/// draw_keyboard_ui(
+///     "Filter Demo",
+///     Some("SPACE = Cycle filters | 1-5 = Adjust resonance")
+/// )?;
+/// ```
+#[allow(dead_code)]
+pub fn draw_keyboard_ui(title: &str, extra_info: Option<&str>) -> Result<()> {
+    let mut stdout = stdout();
+    stdout.execute(crossterm::terminal::Clear(
+        crossterm::terminal::ClearType::All,
+    ))?;
+    stdout.execute(crossterm::cursor::MoveTo(0, 0))?;
+
+    // Title
+    write!(stdout, "{}\r\n", title)?;
+    // Line 1 is reserved for status from output_info()
+    write!(stdout, "\r\n")?;
+    write!(stdout, "\r\n")?;
+
+    // Keyboard layout
+    write!(stdout, "Keyboard Layout:\r\n")?;
+    write!(stdout, "\r\n")?;
+    write!(stdout, "  W E   T Y U   O P     (Black keys)\r\n")?;
+    write!(stdout, " A S D F G H J K L      (White keys)\r\n")?;
+    write!(stdout, " C D E F G A B C D      (Notes)\r\n")?;
+    write!(stdout, "\r\n")?;
+
+    // Extra info (if provided)
+    if let Some(info) = extra_info {
+        write!(stdout, "{}\r\n", info)?;
+        write!(stdout, "\r\n")?;
+    }
+
+    // Quit instructions
+    write!(stdout, "Q/ESC = Quit\r\n")?;
+
+    stdout.flush()?;
+    Ok(())
+}
