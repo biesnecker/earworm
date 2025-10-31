@@ -13,6 +13,7 @@ use crate::{AudioSignal, Signal};
 /// # Type Parameters
 ///
 /// * `SAMPLE_RATE` - Sample rate in Hz (e.g., 44100 for CD quality)
+#[derive(Clone)]
 pub struct TriangleOscillator<const SAMPLE_RATE: u32> {
     /// Current phase of the oscillator (0.0 to 1.0)
     phase: f64,
@@ -218,6 +219,17 @@ mod tests {
         // Check that all samples are in valid range
         for &sample in buffer.iter() {
             assert!((-1.0..=1.0).contains(&sample));
+        }
+    }
+
+    #[test]
+    fn test_clone() {
+        let mut osc1 = TriangleOscillator::<44100>::new(440.0);
+        let mut osc2 = osc1.clone();
+
+        // Both should generate the same samples
+        for _ in 0..100 {
+            assert_eq!(osc1.next_sample(), osc2.next_sample());
         }
     }
 }

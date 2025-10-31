@@ -36,10 +36,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Create synth with punchy envelope
-    let osc = SawtoothOscillator::new(440.0);
-    let env = ADSR::new(0.005, 0.1, 0.3, 0.2, SAMPLE_RATE as f64);
-    let synth = VoiceAllocator::<SAMPLE_RATE, VOICES, _, _>::new(osc, env)
-        .with_strategy(StealingStrategy::Oldest);
+    let synth = VoiceAllocator::<SAMPLE_RATE, VOICES, _, _>::new(|| {
+        let osc = SawtoothOscillator::new(440.0);
+        let env = ADSR::new(0.005, 0.1, 0.3, 0.2, SAMPLE_RATE as f64);
+        (osc, env)
+    })
+    .with_strategy(StealingStrategy::Oldest);
 
     let mut sequencer = sequencer;
 

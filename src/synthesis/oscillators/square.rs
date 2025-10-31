@@ -4,6 +4,7 @@ use super::Oscillator;
 use crate::core::Pitched;
 use crate::{AudioSignal, Signal};
 
+#[derive(Clone)]
 pub struct SquareOscillator<const SAMPLE_RATE: u32> {
     phase: f64,
     phase_increment: f64,
@@ -152,6 +153,17 @@ mod tests {
         osc.process(&mut buffer);
         for &sample in buffer.iter() {
             assert!(sample == 1.0 || sample == -1.0);
+        }
+    }
+
+    #[test]
+    fn test_clone() {
+        let mut osc1 = SquareOscillator::<44100>::new(440.0);
+        let mut osc2 = osc1.clone();
+
+        // Both should generate the same samples
+        for _ in 0..100 {
+            assert_eq!(osc1.next_sample(), osc2.next_sample());
         }
     }
 }

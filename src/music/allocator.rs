@@ -16,8 +16,8 @@
 //! Main structure managing voice allocation:
 //! - `SAMPLE_RATE`: Sample rate in Hz (const generic)
 //! - `VOICES`: Maximum number of simultaneous voices (const generic)
-//! - `S`: Signal type (oscillator, wavetable, etc.) - must implement `AudioSignal + Pitched + Clone`
-//! - `E`: Envelope type - must implement `Envelope + Clone`
+//! - `S`: Signal type (oscillator, wavetable, etc.) - must implement `AudioSignal + Pitched`
+//! - `E`: Envelope type - must implement `Envelope`
 //!
 //! ### VoiceState
 //!
@@ -41,14 +41,16 @@
 //! ```rust,ignore
 //! impl<const SAMPLE_RATE: u32, const VOICES: usize, S, E> VoiceAllocator<SAMPLE_RATE, VOICES, S, E>
 //! where
-//!     S: AudioSignal<SAMPLE_RATE> + Pitched + Clone,
-//!     E: Envelope + Clone,
+//!     S: AudioSignal<SAMPLE_RATE> + Pitched,
+//!     E: Envelope,
 //! {
-//!     /// Creates a new voice allocator with the given signal and envelope templates.
+//!     /// Creates a new voice allocator using a factory function to create voices.
 //!     ///
-//!     /// Each voice is created by cloning the provided signal and envelope.
+//!     /// The factory function is called once for each voice to create fresh instances.
 //!     /// The stealing strategy defaults to `Released`.
-//!     pub fn new(signal_template: S, envelope_template: E) -> Self;
+//!     pub fn new<F>(voice_factory: F) -> Self
+//!     where
+//!         F: FnMut() -> (S, E);
 //!
 //!     /// Sets the voice stealing strategy.
 //!     pub fn with_strategy(mut self, strategy: StealingStrategy) -> Self;
@@ -60,8 +62,8 @@
 //! ```rust,ignore
 //! impl<const SAMPLE_RATE: u32, const VOICES: usize, S, E> VoiceAllocator<SAMPLE_RATE, VOICES, S, E>
 //! where
-//!     S: AudioSignal<SAMPLE_RATE> + Pitched + Clone,
-//!     E: Envelope + Clone,
+//!     S: AudioSignal<SAMPLE_RATE> + Pitched,
+//!     E: Envelope,
 //! {
 //!     /// Triggers a note with the given MIDI note number and velocity.
 //!     ///
@@ -135,13 +137,12 @@
 //! const SAMPLE_RATE: u32 = 44100;
 //! const VOICE_COUNT: usize = 8;
 //!
-//! // Create templates
-//! let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
-//! let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
-//!
-//! // Create allocator
-//! let mut allocator = VoiceAllocator::<SAMPLE_RATE, VOICE_COUNT, _, _>::new(osc, env)
-//!     .with_strategy(StealingStrategy::Released);
+//! // Create allocator with factory function
+//! let mut allocator = VoiceAllocator::<SAMPLE_RATE, VOICE_COUNT, _, _>::new(|| {
+//!     let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
+//!     let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
+//!     (osc, env)
+//! }).with_strategy(StealingStrategy::Released);
 //!
 //! // Play a chord
 //! allocator.note_on(60, 0.8); // C4
@@ -162,7 +163,7 @@
 //!
 //! - Voice state is stored in a fixed-size array `[VoiceState; VOICES]`
 //! - Age counter wraps at u64::MAX (practically never in real usage)
-//! - Clone is required for S and E to create voice instances
+//! - Factory function is called once for each voice during initialization
 //! - Each voice maintains independent state (phase, envelope position, etc.)
 //! - Signal mixing is done in next_sample() - no separate mixing buffer needed
 
@@ -202,8 +203,8 @@ where
 ///
 /// * `SAMPLE_RATE` - Sample rate in Hz
 /// * `VOICES` - Maximum number of simultaneous voices
-/// * `S` - Signal type (must be `AudioSignal + Pitched + Clone`)
-/// * `E` - Envelope type (must be `Envelope + Clone`)
+/// * `S` - Signal type (must be `AudioSignal + Pitched`)
+/// * `E` - Envelope type (must be `Envelope`)
 ///
 /// # Examples
 ///
@@ -213,9 +214,11 @@ where
 ///
 /// const SAMPLE_RATE: u32 = 44100;
 ///
-/// let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
-/// let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
-/// let mut allocator = VoiceAllocator::<SAMPLE_RATE, 8, _, _>::new(osc, env);
+/// let mut allocator = VoiceAllocator::<SAMPLE_RATE, 8, _, _>::new(|| {
+///     let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
+///     let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
+///     (osc, env)
+/// });
 ///
 /// // Play a chord
 /// allocator.note_on(60, 0.8);
@@ -227,8 +230,8 @@ where
 /// ```
 pub struct VoiceAllocator<const SAMPLE_RATE: u32, const VOICES: usize, S, E>
 where
-    S: AudioSignal<SAMPLE_RATE> + Pitched + Clone,
-    E: Envelope + Clone,
+    S: AudioSignal<SAMPLE_RATE> + Pitched,
+    E: Envelope,
 {
     voices: [VoiceState<SAMPLE_RATE, S, E>; VOICES],
     strategy: StealingStrategy,
@@ -237,18 +240,18 @@ where
 
 impl<const SAMPLE_RATE: u32, const VOICES: usize, S, E> VoiceAllocator<SAMPLE_RATE, VOICES, S, E>
 where
-    S: AudioSignal<SAMPLE_RATE> + Pitched + Clone,
-    E: Envelope + Clone,
+    S: AudioSignal<SAMPLE_RATE> + Pitched,
+    E: Envelope,
 {
-    /// Creates a new voice allocator with the given signal and envelope templates.
+    /// Creates a new voice allocator using a factory function to create voices.
     ///
-    /// Each voice is created by cloning the provided signal and envelope.
+    /// The factory function is called once for each voice to create fresh instances.
+    /// This allows using any signal and envelope types, even those that don't implement Clone.
     /// The stealing strategy defaults to `Released`.
     ///
     /// # Arguments
     ///
-    /// * `signal_template` - Template signal to clone for each voice
-    /// * `envelope_template` - Template envelope to clone for each voice
+    /// * `voice_factory` - Function that creates a new (signal, envelope) pair for each voice
     ///
     /// # Examples
     ///
@@ -258,17 +261,25 @@ where
     ///
     /// const SAMPLE_RATE: u32 = 44100;
     ///
-    /// let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
-    /// let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
-    /// let allocator = VoiceAllocator::<SAMPLE_RATE, 4, _, _>::new(osc, env);
+    /// let allocator = VoiceAllocator::<SAMPLE_RATE, 4, _, _>::new(|| {
+    ///     let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
+    ///     let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
+    ///     (osc, env)
+    /// });
     /// ```
-    pub fn new(signal_template: S, envelope_template: E) -> Self {
-        // Create array of voice states by cloning templates
-        let voices = std::array::from_fn(|_| VoiceState {
-            voice: Voice::new(signal_template.clone(), envelope_template.clone()),
-            note: None,
-            age: 0,
-            velocity: 0.0,
+    pub fn new<F>(mut voice_factory: F) -> Self
+    where
+        F: FnMut() -> (S, E),
+    {
+        // Create array of voice states using the factory function
+        let voices = std::array::from_fn(|_| {
+            let (signal, envelope) = voice_factory();
+            VoiceState {
+                voice: Voice::new(signal, envelope),
+                note: None,
+                age: 0,
+                velocity: 0.0,
+            }
         });
 
         Self {
@@ -288,10 +299,11 @@ where
     ///
     /// const SAMPLE_RATE: u32 = 44100;
     ///
-    /// let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
-    /// let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
-    /// let allocator = VoiceAllocator::<SAMPLE_RATE, 4, _, _>::new(osc, env)
-    ///     .with_strategy(StealingStrategy::Oldest);
+    /// let allocator = VoiceAllocator::<SAMPLE_RATE, 4, _, _>::new(|| {
+    ///     let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
+    ///     let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
+    ///     (osc, env)
+    /// }).with_strategy(StealingStrategy::Oldest);
     /// ```
     pub fn with_strategy(mut self, strategy: StealingStrategy) -> Self {
         self.strategy = strategy;
@@ -316,9 +328,11 @@ where
     ///
     /// const SAMPLE_RATE: u32 = 44100;
     ///
-    /// let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
-    /// let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
-    /// let mut allocator = VoiceAllocator::<SAMPLE_RATE, 4, _, _>::new(osc, env);
+    /// let mut allocator = VoiceAllocator::<SAMPLE_RATE, 4, _, _>::new(|| {
+    ///     let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
+    ///     let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
+    ///     (osc, env)
+    /// });
     ///
     /// allocator.note_on(60, 0.8); // Middle C at 80% velocity
     /// ```
@@ -350,9 +364,11 @@ where
     ///
     /// const SAMPLE_RATE: u32 = 44100;
     ///
-    /// let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
-    /// let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
-    /// let mut allocator = VoiceAllocator::<SAMPLE_RATE, 4, _, _>::new(osc, env);
+    /// let mut allocator = VoiceAllocator::<SAMPLE_RATE, 4, _, _>::new(|| {
+    ///     let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
+    ///     let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
+    ///     (osc, env)
+    /// });
     ///
     /// allocator.note_on(60, 0.8);
     /// allocator.note_off(60);
@@ -375,9 +391,11 @@ where
     ///
     /// const SAMPLE_RATE: u32 = 44100;
     ///
-    /// let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
-    /// let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
-    /// let mut allocator = VoiceAllocator::<SAMPLE_RATE, 4, _, _>::new(osc, env);
+    /// let mut allocator = VoiceAllocator::<SAMPLE_RATE, 4, _, _>::new(|| {
+    ///     let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
+    ///     let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
+    ///     (osc, env)
+    /// });
     ///
     /// allocator.note_on(60, 0.8);
     /// allocator.note_on(64, 0.8);
@@ -400,9 +418,11 @@ where
     ///
     /// const SAMPLE_RATE: u32 = 44100;
     ///
-    /// let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
-    /// let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
-    /// let mut allocator = VoiceAllocator::<SAMPLE_RATE, 4, _, _>::new(osc, env);
+    /// let mut allocator = VoiceAllocator::<SAMPLE_RATE, 4, _, _>::new(|| {
+    ///     let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
+    ///     let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
+    ///     (osc, env)
+    /// });
     ///
     /// assert!(!allocator.is_note_playing(60));
     /// allocator.note_on(60, 0.8);
@@ -424,9 +444,11 @@ where
     ///
     /// const SAMPLE_RATE: u32 = 44100;
     ///
-    /// let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
-    /// let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
-    /// let mut allocator = VoiceAllocator::<SAMPLE_RATE, 4, _, _>::new(osc, env);
+    /// let mut allocator = VoiceAllocator::<SAMPLE_RATE, 4, _, _>::new(|| {
+    ///     let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
+    ///     let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
+    ///     (osc, env)
+    /// });
     ///
     /// assert_eq!(allocator.active_voice_count(), 0);
     /// allocator.note_on(60, 0.8);
@@ -519,8 +541,8 @@ where
 impl<const SAMPLE_RATE: u32, const VOICES: usize, S, E> Signal
     for VoiceAllocator<SAMPLE_RATE, VOICES, S, E>
 where
-    S: AudioSignal<SAMPLE_RATE> + Pitched + Clone,
-    E: Envelope + Clone,
+    S: AudioSignal<SAMPLE_RATE> + Pitched,
+    E: Envelope,
 {
     fn next_sample(&mut self) -> f64 {
         // Sum all voice outputs
@@ -555,8 +577,8 @@ where
 impl<const SAMPLE_RATE: u32, const VOICES: usize, S, E> AudioSignal<SAMPLE_RATE>
     for VoiceAllocator<SAMPLE_RATE, VOICES, S, E>
 where
-    S: AudioSignal<SAMPLE_RATE> + Pitched + Clone,
-    E: Envelope + Clone,
+    S: AudioSignal<SAMPLE_RATE> + Pitched,
+    E: Envelope,
 {
 }
 
@@ -569,18 +591,22 @@ mod tests {
 
     #[test]
     fn test_creation() {
-        let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
-        let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
-        let allocator = VoiceAllocator::<SAMPLE_RATE, 4, _, _>::new(osc, env);
+        let allocator = VoiceAllocator::<SAMPLE_RATE, 4, _, _>::new(|| {
+            let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
+            let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
+            (osc, env)
+        });
 
         assert_eq!(allocator.active_voice_count(), 0);
     }
 
     #[test]
     fn test_basic_note_on_off() {
-        let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
-        let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
-        let mut allocator = VoiceAllocator::<SAMPLE_RATE, 4, _, _>::new(osc, env);
+        let mut allocator = VoiceAllocator::<SAMPLE_RATE, 4, _, _>::new(|| {
+            let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
+            let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
+            (osc, env)
+        });
 
         // Initially no notes playing
         assert!(!allocator.is_note_playing(60));
@@ -600,9 +626,11 @@ mod tests {
 
     #[test]
     fn test_multiple_simultaneous_notes() {
-        let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
-        let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
-        let mut allocator = VoiceAllocator::<SAMPLE_RATE, 8, _, _>::new(osc, env);
+        let mut allocator = VoiceAllocator::<SAMPLE_RATE, 8, _, _>::new(|| {
+            let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
+            let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
+            (osc, env)
+        });
 
         // Play a chord (C major)
         allocator.note_on(60, 0.8); // C
@@ -623,9 +651,11 @@ mod tests {
 
     #[test]
     fn test_voice_stealing_when_exceeding_limit() {
-        let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
-        let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
-        let mut allocator = VoiceAllocator::<SAMPLE_RATE, 4, _, _>::new(osc, env);
+        let mut allocator = VoiceAllocator::<SAMPLE_RATE, 4, _, _>::new(|| {
+            let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
+            let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
+            (osc, env)
+        });
 
         // Play 4 notes (fill all voices)
         allocator.note_on(60, 0.8);
@@ -650,9 +680,11 @@ mod tests {
 
     #[test]
     fn test_all_notes_off() {
-        let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
-        let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
-        let mut allocator = VoiceAllocator::<SAMPLE_RATE, 4, _, _>::new(osc, env);
+        let mut allocator = VoiceAllocator::<SAMPLE_RATE, 4, _, _>::new(|| {
+            let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
+            let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
+            (osc, env)
+        });
 
         // Play multiple notes
         allocator.note_on(60, 0.8);
@@ -671,10 +703,12 @@ mod tests {
 
     #[test]
     fn test_voice_recycling() {
-        let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
-        // Very short envelope for quick recycling
-        let env = ADSR::new(0.001, 0.001, 0.7, 0.001, SAMPLE_RATE as f64);
-        let mut allocator = VoiceAllocator::<SAMPLE_RATE, 2, _, _>::new(osc, env);
+        let mut allocator = VoiceAllocator::<SAMPLE_RATE, 2, _, _>::new(|| {
+            let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
+            // Very short envelope for quick recycling
+            let env = ADSR::new(0.001, 0.001, 0.7, 0.001, SAMPLE_RATE as f64);
+            (osc, env)
+        });
 
         // Play and release a note
         allocator.note_on(60, 0.8);
@@ -695,9 +729,11 @@ mod tests {
 
     #[test]
     fn test_rapid_note_changes() {
-        let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
-        let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
-        let mut allocator = VoiceAllocator::<SAMPLE_RATE, 4, _, _>::new(osc, env);
+        let mut allocator = VoiceAllocator::<SAMPLE_RATE, 4, _, _>::new(|| {
+            let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
+            let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
+            (osc, env)
+        });
 
         // Rapidly trigger and release notes
         for note in 60..80 {
@@ -716,9 +752,11 @@ mod tests {
 
     #[test]
     fn test_signal_generation() {
-        let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
-        let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
-        let mut allocator = VoiceAllocator::<SAMPLE_RATE, 4, _, _>::new(osc, env);
+        let mut allocator = VoiceAllocator::<SAMPLE_RATE, 4, _, _>::new(|| {
+            let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
+            let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
+            (osc, env)
+        });
 
         // Play a note
         allocator.note_on(60, 0.8);
@@ -733,9 +771,11 @@ mod tests {
 
     #[test]
     fn test_process_buffer() {
-        let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
-        let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
-        let mut allocator = VoiceAllocator::<SAMPLE_RATE, 4, _, _>::new(osc, env);
+        let mut allocator = VoiceAllocator::<SAMPLE_RATE, 4, _, _>::new(|| {
+            let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
+            let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
+            (osc, env)
+        });
 
         allocator.note_on(60, 0.8);
         allocator.note_on(64, 0.8);
@@ -749,10 +789,12 @@ mod tests {
 
     #[test]
     fn test_stealing_strategy_oldest() {
-        let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
-        let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
-        let mut allocator = VoiceAllocator::<SAMPLE_RATE, 3, _, _>::new(osc, env)
-            .with_strategy(StealingStrategy::Oldest);
+        let mut allocator = VoiceAllocator::<SAMPLE_RATE, 3, _, _>::new(|| {
+            let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
+            let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
+            (osc, env)
+        })
+        .with_strategy(StealingStrategy::Oldest);
 
         // Fill all voices
         allocator.note_on(60, 0.8);

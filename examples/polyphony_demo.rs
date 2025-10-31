@@ -53,14 +53,27 @@ enum PolyAllocator {
 
 impl PolyAllocator {
     fn new(voice_count: usize) -> Self {
-        let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
-        let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
-
         match voice_count {
-            1 => PolyAllocator::Voices1(Box::new(VoiceAllocator::new(osc, env))),
-            2 => PolyAllocator::Voices2(Box::new(VoiceAllocator::new(osc, env))),
-            4 => PolyAllocator::Voices4(Box::new(VoiceAllocator::new(osc, env))),
-            _ => PolyAllocator::Voices8(Box::new(VoiceAllocator::new(osc, env))),
+            1 => PolyAllocator::Voices1(Box::new(VoiceAllocator::new(|| {
+                let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
+                let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
+                (osc, env)
+            }))),
+            2 => PolyAllocator::Voices2(Box::new(VoiceAllocator::new(|| {
+                let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
+                let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
+                (osc, env)
+            }))),
+            4 => PolyAllocator::Voices4(Box::new(VoiceAllocator::new(|| {
+                let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
+                let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
+                (osc, env)
+            }))),
+            _ => PolyAllocator::Voices8(Box::new(VoiceAllocator::new(|| {
+                let osc = SineOscillator::<SAMPLE_RATE>::new(440.0);
+                let env = ADSR::new(0.01, 0.1, 0.7, 0.3, SAMPLE_RATE as f64);
+                (osc, env)
+            }))),
         }
     }
 
