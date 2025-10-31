@@ -54,6 +54,7 @@ enum EnvelopeState {
 ///     let level = env.next_sample();
 /// }
 /// ```
+#[derive(Clone)]
 pub struct ADSR {
     state: EnvelopeState,
     phase_position: f64,      // samples elapsed in current phase

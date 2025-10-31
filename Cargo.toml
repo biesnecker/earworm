@@ -25,3 +25,7 @@ cargo-husky = { version = "1.5.0", features = ["precommit-hook", "run-cargo-test
 [[example]]
 name = "voice_demo"
 required-features = ["music"]
+
+[[example]]
+name = "polyphony_demo"
+required-features = ["music"]
