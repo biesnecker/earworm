@@ -20,3 +20,8 @@ cpal = "0.15"
 anyhow = "1.0"
 crossterm = "0.28"
 cargo-husky = { version = "1.5.0", features = ["precommit-hook", "run-cargo-test", "run-cargo-clippy", "run-cargo-fmt"] }
+
+# Examples that require specific features
+[[example]]
+name = "voice_demo"
+required-features = ["music"]

@@ -29,6 +29,40 @@ cargo run --example filter_demo_interactive
 cargo run --example adsr_spacebar
 ```
 
+## Important Development Notes
+
+### Pre-Commit Checklist (MUST complete ALL before claiming task is done)
+1. **Format**: `cargo fmt --all`
+2. **Lint**: `cargo clippy --all-targets --all-features -- -D warnings`
+3. **Test**: `cargo test --all-features` (all tests must pass)
+4. **Build**: `cargo build --all-features` (must compile cleanly)
+5. **Build Examples with all features**: `cargo build --examples --all-features`
+6. **Build Examples without features**: `cargo build --examples` (ensures examples handle missing features correctly)
+7. **Run New Examples**: For ANY new example created, manually run `cargo run --example <name>` to verify it actually executes (not just compiles)
+
+### Creating New Examples
+When adding a new example, follow these steps to ensure it works correctly in all configurations:
+
+1. **Create the example file** in `examples/`
+2. **Declare feature dependencies** (if needed) in `Cargo.toml`:
+   ```toml
+   [[example]]
+   name = "example_name"
+   required-features = ["feature1", "feature2"]
+   ```
+3. **Test with all features**: `cargo run --example example_name --all-features` - verify it runs without crashing
+4. **Test without features**: `cargo run --example example_name` - ensure it either works or fails gracefully with a clear error message
+5. **Build verification**: Run both `cargo build --examples --all-features` and `cargo build --examples` to catch feature dependency issues
+6. **Document usage** in README.md with any special instructions or controls
+
+**Important**: Building examples with `--all-features` can hide feature dependency problems. Always test both with and without features to ensure correct `required-features` declarations.
+
+### Why These Steps Matter
+- `cargo build --examples --all-features` can hide feature dependency issues
+- Examples must work standalone, not just when all features are enabled
+- Running examples catches runtime errors that compilation misses
+- DO NOT claim a task is complete without running ALL checks above
+
 ## Architecture
 
 ### Core Trait Hierarchy

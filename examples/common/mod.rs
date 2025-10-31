@@ -230,3 +230,93 @@ fn cleanup_terminal(has_keyboard_enhancements: bool) {
 pub fn is_quit_key(code: KeyCode) -> bool {
     matches!(code, KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc)
 }
+
+/// Maps computer keyboard keys to MIDI note numbers.
+///
+/// Layout mimics a piano keyboard with two rows:
+/// - Bottom row (A-K): White keys starting at C4 (middle C)
+/// - Top row (W-O): Black keys (sharps/flats)
+///
+/// The mapping follows a piano-style layout:
+/// ```text
+/// W E   T Y U   O P
+///  ↓ ↓   ↓ ↓ ↓   ↓ ↓
+/// A S D F G H J K L
+/// C D E F G A B C D (note names)
+/// ```
+///
+/// # Returns
+///
+/// `Some(midi_note)` if the key maps to a note, `None` otherwise.
+///
+/// # Examples
+///
+/// ```no_run
+/// use common::key_to_midi_note;
+/// use crossterm::event::KeyCode;
+///
+/// assert_eq!(key_to_midi_note(KeyCode::Char('a')), Some(60)); // C4
+/// assert_eq!(key_to_midi_note(KeyCode::Char('w')), Some(61)); // C#4
+/// assert_eq!(key_to_midi_note(KeyCode::Char('s')), Some(62)); // D4
+/// ```
+#[allow(dead_code)]
+pub fn key_to_midi_note(code: KeyCode) -> Option<u8> {
+    match code {
+        // Bottom row: white keys (C4 to D5)
+        KeyCode::Char('a') | KeyCode::Char('A') => Some(60), // C4 (middle C)
+        KeyCode::Char('s') | KeyCode::Char('S') => Some(62), // D4
+        KeyCode::Char('d') | KeyCode::Char('D') => Some(64), // E4
+        KeyCode::Char('f') | KeyCode::Char('F') => Some(65), // F4
+        KeyCode::Char('g') | KeyCode::Char('G') => Some(67), // G4
+        KeyCode::Char('h') | KeyCode::Char('H') => Some(69), // A4
+        KeyCode::Char('j') | KeyCode::Char('J') => Some(71), // B4
+        KeyCode::Char('k') | KeyCode::Char('K') => Some(72), // C5
+        KeyCode::Char('l') | KeyCode::Char('L') => Some(74), // D5
+
+        // Top row: black keys (sharps)
+        KeyCode::Char('w') | KeyCode::Char('W') => Some(61), // C#4
+        KeyCode::Char('e') | KeyCode::Char('E') => Some(63), // D#4
+        // No F between E and F
+        KeyCode::Char('t') | KeyCode::Char('T') => Some(66), // F#4
+        KeyCode::Char('y') | KeyCode::Char('Y') => Some(68), // G#4
+        KeyCode::Char('u') | KeyCode::Char('U') => Some(70), // A#4
+        // No B# between B and C
+        KeyCode::Char('o') | KeyCode::Char('O') => Some(73), // C#5
+        KeyCode::Char('p') | KeyCode::Char('P') => Some(75), // D#5
+
+        _ => None,
+    }
+}
+
+/// Converts a MIDI note number to its musical name (e.g., "C4", "A#3").
+///
+/// Uses sharp notation for accidentals (e.g., "C#" rather than "Db").
+///
+/// # Arguments
+///
+/// * `midi_note` - MIDI note number (0-127)
+///
+/// # Returns
+///
+/// A string representation of the note name with octave (e.g., "C4", "G#5").
+///
+/// # Examples
+///
+/// ```no_run
+/// use common::midi_note_to_name;
+///
+/// assert_eq!(midi_note_to_name(60), "C4");  // Middle C
+/// assert_eq!(midi_note_to_name(69), "A4");  // 440 Hz
+/// assert_eq!(midi_note_to_name(61), "C#4"); // C sharp
+/// ```
+#[allow(dead_code)]
+pub fn midi_note_to_name(midi_note: u8) -> String {
+    const NOTE_NAMES: [&str; 12] = [
+        "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
+    ];
+
+    let octave = (midi_note as i32 / 12) - 1;
+    let note_index = (midi_note % 12) as usize;
+
+    format!("{}{}", NOTE_NAMES[note_index], octave)
+}
