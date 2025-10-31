@@ -33,3 +33,7 @@ required-features = ["music"]
 [[example]]
 name = "sequencer_simple"
 required-features = ["music"]
+
+[[example]]
+name = "envelope_demo"
+required-features = ["music"]

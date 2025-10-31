@@ -227,6 +227,7 @@ fn cleanup_terminal(has_keyboard_enhancements: bool) {
 }
 
 /// Helper to check if a key code is a quit key (Q, ESC).
+#[allow(dead_code)]
 pub fn is_quit_key(code: KeyCode) -> bool {
     matches!(code, KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc)
 }
