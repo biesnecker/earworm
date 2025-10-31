@@ -4,7 +4,7 @@
 //! - Oscillators (sine, triangle, sawtooth, square, pulse)
 //! - Filters (biquad IIR filters)
 //! - Effects (delay, tremolo, vibrato, distortion, etc.)
-//! - Envelopes (ADSR)
+//! - Curve utilities for shaping parameters
 //! - Noise generators (white, pink)
 //! - AudioSignalExt trait for convenient filter/effect chaining
 //!
@@ -19,7 +19,7 @@ pub mod oscillators;
 
 pub use audio_ext::AudioSignalExt;
 pub use effects::{Bitcrusher, Compressor, Delay, Distortion, Limiter, Tremolo, Vibrato};
-pub use envelopes::{ADSR, Curve};
+pub use envelopes::Curve;
 pub use filters::{BiquadFilter, FilterType};
 pub use noise::{PinkNoise, WhiteNoise};
 pub use oscillators::{

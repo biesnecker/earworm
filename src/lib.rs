@@ -28,14 +28,17 @@ pub use core::{
 // Re-export synthesis types (only with synth feature)
 #[cfg(feature = "synth")]
 pub use synthesis::{
-    ADSR, AudioSignalExt, BiquadFilter, Bitcrusher, Compressor, Curve, Delay, Distortion,
-    FilterType, Limiter, Oscillator, PinkNoise, PulseOscillator, SawtoothOscillator,
-    SineOscillator, SquareOscillator, Tremolo, TriangleOscillator, Vibrato, WhiteNoise,
+    AudioSignalExt, BiquadFilter, Bitcrusher, Compressor, Curve, Delay, Distortion, FilterType,
+    Limiter, Oscillator, PinkNoise, PulseOscillator, SawtoothOscillator, SineOscillator,
+    SquareOscillator, Tremolo, TriangleOscillator, Vibrato, WhiteNoise,
 };
 
 // Re-export music types (only with music feature)
 #[cfg(feature = "music")]
-pub use music::core::{Note, NoteEvent, ParseError, Pitch};
+pub use music::{
+    ADSR, Envelope, Voice,
+    core::{Note, NoteEvent, ParseError, Pitch},
+};
 
 // Re-export the note! macro (only with music feature)
 #[cfg(feature = "music")]

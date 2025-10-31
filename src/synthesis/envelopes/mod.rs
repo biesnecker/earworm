@@ -1,10 +1,8 @@
-//! Envelope generators and curve utilities for controlling parameter changes over time.
+//! Curve utilities for controlling parameter changes over time.
 //!
-//! This module provides tools for creating time-varying control signals, such as
-//! ADSR envelopes and various interpolation curves.
+//! This module provides interpolation curves for shaping envelopes, LFOs,
+//! and other time-varying parameters.
 
-mod adsr;
 mod curve;
 
-pub use adsr::ADSR;
 pub use curve::Curve;

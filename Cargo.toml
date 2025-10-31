@@ -9,7 +9,7 @@ edition = "2024"
 [features]
 default = ["synth"]
 synth = []
-music = ["earworm-macros"]
+music = ["synth", "earworm-macros"]
 
 [dependencies]
 rand = "0.8"

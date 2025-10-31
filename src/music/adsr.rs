@@ -1,7 +1,7 @@
 //! ADSR (Attack, Decay, Sustain, Release) envelope generator.
 
-use super::Curve;
-use crate::Signal;
+use super::envelope::Envelope;
+use crate::synthesis::envelopes::Curve;
 
 /// State of the ADSR envelope.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,15 +29,16 @@ enum EnvelopeState {
 /// # Examples
 ///
 /// ```
-/// use earworm::{ADSR, Signal, Curve};
+/// use earworm::{ADSR, Curve};
+/// use earworm::music::envelope::Envelope;
 ///
 /// // Create an ADSR with 0.1s attack, 0.2s decay, 0.7 sustain level, 0.3s release
 /// let mut env = ADSR::new(0.1, 0.2, 0.7, 0.3, 44100.0)
 ///     .with_attack_curve(Curve::Exponential(2.0))
 ///     .with_release_curve(Curve::Exponential(3.0));
 ///
-/// // Trigger the envelope
-/// env.note_on();
+/// // Trigger the envelope with velocity
+/// env.trigger(0.8);
 ///
 /// // Generate samples during attack/decay/sustain
 /// for _ in 0..1000 {
@@ -46,7 +47,7 @@ enum EnvelopeState {
 /// }
 ///
 /// // Release the envelope
-/// env.note_off();
+/// env.release();
 ///
 /// // Generate samples during release
 /// while env.is_active() {
@@ -160,72 +161,16 @@ impl ADSR {
         self
     }
 
-    /// Triggers the envelope (starts attack phase).
-    ///
-    /// Calling this while the envelope is already active will retrigger it from the beginning.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use earworm::{ADSR, Signal};
-    ///
-    /// let mut env = ADSR::new(0.1, 0.1, 0.7, 0.1, 44100.0);
-    /// env.note_on();
-    /// assert!(env.is_active());
-    /// ```
-    pub fn note_on(&mut self) {
-        self.state = EnvelopeState::Attack;
-        self.phase_position = 0.0;
-    }
-
-    /// Releases the envelope (starts release phase).
-    ///
-    /// If the envelope is idle, this has no effect.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use earworm::{ADSR, Signal};
-    ///
-    /// let mut env = ADSR::new(0.1, 0.1, 0.7, 0.1, 44100.0);
-    /// env.note_on();
-    /// // ... generate some samples ...
-    /// env.note_off();
-    /// ```
-    pub fn note_off(&mut self) {
-        if !matches!(self.state, EnvelopeState::Idle) {
-            self.state = EnvelopeState::Release;
-            self.phase_position = 0.0;
-            self.release_start_level = self.current_level;
-        }
-    }
-
-    /// Returns true if the envelope is currently active (not idle).
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use earworm::{ADSR, Signal};
-    ///
-    /// let mut env = ADSR::new(0.1, 0.1, 0.7, 0.1, 44100.0);
-    /// assert!(!env.is_active());
-    ///
-    /// env.note_on();
-    /// assert!(env.is_active());
-    /// ```
-    pub fn is_active(&self) -> bool {
-        !matches!(self.state, EnvelopeState::Idle)
-    }
-
     /// Resets the envelope to idle state.
     ///
     /// # Examples
     ///
     /// ```
-    /// use earworm::{ADSR, Signal};
+    /// use earworm::ADSR;
+    /// use earworm::music::envelope::Envelope;
     ///
     /// let mut env = ADSR::new(0.1, 0.1, 0.7, 0.1, 44100.0);
-    /// env.note_on();
+    /// env.trigger(0.8);
     /// env.reset();
     /// assert!(!env.is_active());
     /// ```
@@ -243,7 +188,25 @@ impl ADSR {
     }
 }
 
-impl Signal for ADSR {
+impl Envelope for ADSR {
+    fn trigger(&mut self, _velocity: f64) {
+        // For now, velocity is ignored. Future enhancement: scale peak level by velocity
+        self.state = EnvelopeState::Attack;
+        self.phase_position = 0.0;
+    }
+
+    fn release(&mut self) {
+        if !matches!(self.state, EnvelopeState::Idle) {
+            self.state = EnvelopeState::Release;
+            self.phase_position = 0.0;
+            self.release_start_level = self.current_level;
+        }
+    }
+
+    fn is_active(&self) -> bool {
+        !matches!(self.state, EnvelopeState::Idle)
+    }
+
     fn next_sample(&mut self) -> f64 {
         match self.state {
             EnvelopeState::Idle => 0.0,
@@ -347,7 +310,7 @@ mod tests {
     #[test]
     fn test_note_on_activates() {
         let mut env = ADSR::new(0.1, 0.2, 0.7, 0.3, SAMPLE_RATE);
-        env.note_on();
+        env.trigger(1.0);
         assert!(env.is_active());
         assert_eq!(env.state(), EnvelopeState::Attack);
     }
@@ -362,7 +325,7 @@ mod tests {
     #[test]
     fn test_attack_phase_linear() {
         let mut env = ADSR::new(1.0, 0.0, 1.0, 0.0, SAMPLE_RATE);
-        env.note_on();
+        env.trigger(1.0);
 
         // First sample should be near 0
         let s1 = env.next_sample();
@@ -387,7 +350,7 @@ mod tests {
     #[test]
     fn test_decay_phase_linear() {
         let mut env = ADSR::new(0.0, 1.0, 0.5, 0.0, SAMPLE_RATE);
-        env.note_on();
+        env.trigger(1.0);
 
         // Skip attack (instant) - moves to decay
         let first = env.next_sample();
@@ -415,7 +378,7 @@ mod tests {
     #[test]
     fn test_sustain_phase() {
         let mut env = ADSR::new(0.0, 0.0, 0.6, 0.0, SAMPLE_RATE);
-        env.note_on();
+        env.trigger(1.0);
 
         // Skip to sustain
         env.next_sample(); // attack
@@ -433,7 +396,7 @@ mod tests {
     #[test]
     fn test_release_phase_linear() {
         let mut env = ADSR::new(0.0, 0.0, 0.8, 1.0, SAMPLE_RATE);
-        env.note_on();
+        env.trigger(1.0);
 
         // Get to sustain
         env.next_sample();
@@ -441,7 +404,7 @@ mod tests {
         assert_eq!(env.state(), EnvelopeState::Sustain);
 
         // Trigger release
-        env.note_off();
+        env.release();
         assert_eq!(env.state(), EnvelopeState::Release);
 
         // First release sample should be near sustain level
@@ -468,7 +431,7 @@ mod tests {
     #[test]
     fn test_note_off_during_attack() {
         let mut env = ADSR::new(1.0, 0.1, 0.7, 0.5, SAMPLE_RATE);
-        env.note_on();
+        env.trigger(1.0);
 
         // Generate a few attack samples
         for _ in 0..10 {
@@ -478,7 +441,7 @@ mod tests {
         let level_before_release = env.current_level;
 
         // Release during attack
-        env.note_off();
+        env.release();
         assert_eq!(env.state(), EnvelopeState::Release);
 
         // Should release from current level
@@ -489,7 +452,7 @@ mod tests {
     #[test]
     fn test_note_off_during_decay() {
         let mut env = ADSR::new(0.0, 1.0, 0.5, 0.5, SAMPLE_RATE);
-        env.note_on();
+        env.trigger(1.0);
         env.next_sample(); // Skip attack
 
         // Generate a few decay samples
@@ -500,7 +463,7 @@ mod tests {
         let level_before_release = env.current_level;
 
         // Release during decay
-        env.note_off();
+        env.release();
         assert_eq!(env.state(), EnvelopeState::Release);
 
         // Should release from current level
@@ -511,7 +474,7 @@ mod tests {
     #[test]
     fn test_reset() {
         let mut env = ADSR::new(0.1, 0.1, 0.7, 0.1, SAMPLE_RATE);
-        env.note_on();
+        env.trigger(1.0);
 
         // Generate some samples
         for _ in 0..50 {
@@ -526,7 +489,7 @@ mod tests {
     #[test]
     fn test_retrigger() {
         let mut env = ADSR::new(0.5, 0.1, 0.7, 0.1, SAMPLE_RATE);
-        env.note_on();
+        env.trigger(1.0);
 
         // Generate samples until partway through attack
         for _ in 0..25 {
@@ -535,7 +498,7 @@ mod tests {
         assert_eq!(env.state(), EnvelopeState::Attack);
 
         // Retrigger
-        env.note_on();
+        env.trigger(1.0);
         assert_eq!(env.state(), EnvelopeState::Attack);
         assert_eq!(env.phase_position, 0.0);
 
@@ -548,7 +511,7 @@ mod tests {
     fn test_exponential_attack_curve() {
         let mut env =
             ADSR::new(1.0, 0.0, 1.0, 0.0, SAMPLE_RATE).with_attack_curve(Curve::Exponential(2.0));
-        env.note_on();
+        env.trigger(1.0);
 
         // At 50% progress, exponential(2.0) should give 0.25
         for _ in 0..50 {
@@ -562,11 +525,11 @@ mod tests {
     fn test_exponential_release_curve() {
         let mut env =
             ADSR::new(0.0, 0.0, 1.0, 1.0, SAMPLE_RATE).with_release_curve(Curve::Exponential(2.0));
-        env.note_on();
+        env.trigger(1.0);
         env.next_sample();
         env.next_sample();
 
-        env.note_off();
+        env.release();
 
         // At 50% progress through release, should be at 1.0 * (1 - 0.25) = 0.75
         for _ in 0..50 {
@@ -588,7 +551,7 @@ mod tests {
     #[test]
     fn test_zero_attack_time() {
         let mut env = ADSR::new(0.0, 0.1, 0.7, 0.1, SAMPLE_RATE);
-        env.note_on();
+        env.trigger(1.0);
 
         // First sample should immediately jump to 1.0 and move to decay
         let s = env.next_sample();
@@ -599,7 +562,7 @@ mod tests {
     #[test]
     fn test_zero_decay_time() {
         let mut env = ADSR::new(0.0, 0.0, 0.5, 0.1, SAMPLE_RATE);
-        env.note_on();
+        env.trigger(1.0);
 
         env.next_sample(); // Skip attack
         let s = env.next_sample(); // Should skip decay
@@ -610,11 +573,11 @@ mod tests {
     #[test]
     fn test_zero_release_time() {
         let mut env = ADSR::new(0.0, 0.0, 0.7, 0.0, SAMPLE_RATE);
-        env.note_on();
+        env.trigger(1.0);
         env.next_sample();
         env.next_sample();
 
-        env.note_off();
+        env.release();
         let s = env.next_sample();
         assert_eq!(s, 0.0);
         assert_eq!(env.state(), EnvelopeState::Idle);
@@ -623,7 +586,7 @@ mod tests {
     #[test]
     fn test_full_envelope_cycle() {
         let mut env = ADSR::new(0.1, 0.1, 0.6, 0.1, SAMPLE_RATE);
-        env.note_on();
+        env.trigger(1.0);
 
         // Attack: continues until progress >= 1.0
         // At 100Hz, 0.1s = 10 samples. The 11th sample triggers transition.
@@ -646,7 +609,7 @@ mod tests {
             assert!(approx_eq(level, 0.6));
         }
 
-        env.note_off();
+        env.release();
 
         // Release: 11 samples to complete
         for _ in 0..11 {
@@ -662,18 +625,20 @@ mod tests {
     #[test]
     fn test_note_off_while_idle() {
         let mut env = ADSR::new(0.1, 0.1, 0.7, 0.1, SAMPLE_RATE);
-        env.note_off(); // Should have no effect
+        env.release(); // Should have no effect
         assert!(!env.is_active());
         assert_eq!(env.next_sample(), 0.0);
     }
 
     #[test]
-    fn test_process_buffer() {
+    fn test_generate_buffer() {
         let mut env = ADSR::new(0.1, 0.1, 0.7, 0.1, SAMPLE_RATE);
-        env.note_on();
+        env.trigger(1.0);
 
         let mut buffer = vec![0.0; 50];
-        env.process(&mut buffer);
+        for sample in buffer.iter_mut() {
+            *sample = env.next_sample();
+        }
 
         // Verify all samples are in valid range
         for sample in buffer {
