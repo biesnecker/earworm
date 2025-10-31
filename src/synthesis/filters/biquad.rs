@@ -5,7 +5,7 @@
 //! biquad difference equation. The implementation uses Robert Bristow-Johnson's
 //! Audio EQ Cookbook formulas for coefficient calculation.
 
-use crate::{AudioSignal, Param, Signal};
+use crate::core::{AudioSignal, Param, Signal};
 
 /// The type of filter to apply.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,7 +34,7 @@ pub enum FilterType {
 /// # Examples
 ///
 /// ```
-/// use earworm::{SineOscillator, filters::BiquadFilter};
+/// use earworm::{SineOscillator, synthesis::filters::BiquadFilter};
 ///
 /// let osc = SineOscillator::<44100>::new(440.0);
 /// let mut filter = BiquadFilter::lowpass(osc, 1000.0, 0.707);
@@ -281,7 +281,7 @@ impl<const SAMPLE_RATE: u32, S: AudioSignal<SAMPLE_RATE>> AudioSignal<SAMPLE_RAT
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ConstantSignal, SineOscillator, combinators::SignalExt};
+    use crate::{ConstantSignal, SineOscillator, core::combinators::SignalExt};
 
     #[test]
     fn test_lowpass_creation() {

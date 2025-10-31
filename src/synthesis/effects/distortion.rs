@@ -1,6 +1,6 @@
 //! Distortion effect with drive and dry/wet mix.
 
-use crate::signals::{AudioSignal, Param, Signal};
+use crate::core::{AudioSignal, Param, Signal};
 
 /// Distortion effect that applies gain and clipping to create harmonic distortion.
 ///

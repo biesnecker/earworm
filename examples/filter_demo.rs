@@ -1,4 +1,4 @@
-use earworm::{Signal, SignalExt, SineOscillator, filters::BiquadFilter};
+use earworm::{Signal, SignalExt, SineOscillator, synthesis::filters::BiquadFilter};
 
 const SAMPLE_RATE: u32 = 44100;
 

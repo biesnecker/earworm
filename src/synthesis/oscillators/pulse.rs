@@ -1,6 +1,7 @@
 //! Pulse wave oscillator with modulating duty cycle.
 
 use super::Oscillator;
+use crate::core::Pitched;
 use crate::{AudioSignal, Param, Signal};
 
 pub struct PulseOscillator<const SAMPLE_RATE: u32> {
@@ -35,7 +36,7 @@ impl<const SAMPLE_RATE: u32> Signal for PulseOscillator<SAMPLE_RATE> {
     }
 }
 
-impl<const SAMPLE_RATE: u32> Oscillator for PulseOscillator<SAMPLE_RATE> {
+impl<const SAMPLE_RATE: u32> Pitched for PulseOscillator<SAMPLE_RATE> {
     fn set_frequency(&mut self, frequency: f64) {
         self.phase_increment = frequency / SAMPLE_RATE as f64;
     }
@@ -43,7 +44,9 @@ impl<const SAMPLE_RATE: u32> Oscillator for PulseOscillator<SAMPLE_RATE> {
     fn frequency(&self) -> f64 {
         self.phase_increment * SAMPLE_RATE as f64
     }
+}
 
+impl<const SAMPLE_RATE: u32> Oscillator for PulseOscillator<SAMPLE_RATE> {
     fn reset(&mut self) {
         self.phase = 0.0;
     }

@@ -1,10 +1,19 @@
+[workspace]
+members = ["earworm-macros"]
+
 [package]
 name = "earworm"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["synth"]
+synth = []
+music = ["earworm-macros"]
+
 [dependencies]
 rand = "0.8"
+earworm-macros = { path = "earworm-macros", optional = true }
 
 [dev-dependencies]
 cpal = "0.15"

@@ -1,6 +1,6 @@
 //! Limiter effect for preventing clipping.
 
-use crate::signals::{AudioSignal, Param, Signal};
+use crate::core::{AudioSignal, Param, Signal};
 
 /// Limiter effect that prevents audio from exceeding a threshold.
 ///

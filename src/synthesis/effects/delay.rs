@@ -1,6 +1,6 @@
 //! Delay effect with feedback and dry/wet mix.
 
-use crate::signals::{AudioSignal, Param, Signal};
+use crate::core::{AudioSignal, Param, Signal};
 
 /// Delay effect with feedback and dry/wet mix.
 ///

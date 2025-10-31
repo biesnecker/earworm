@@ -47,7 +47,7 @@ impl Curve {
     /// # Examples
     ///
     /// ```
-    /// use earworm::envelopes::Curve;
+    /// use earworm::synthesis::envelopes::Curve;
     ///
     /// let linear = Curve::Linear;
     /// assert_eq!(linear.apply(0.5), 0.5);
@@ -85,7 +85,7 @@ impl Curve {
     /// # Examples
     ///
     /// ```
-    /// use earworm::envelopes::Curve;
+    /// use earworm::synthesis::envelopes::Curve;
     ///
     /// let curve = Curve::Exponential(2.0);
     /// // Map 0.5 from range [0, 1] to [0, 100] with exponential curve

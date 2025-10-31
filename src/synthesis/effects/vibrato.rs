@@ -1,6 +1,6 @@
 //! Vibrato effect using pitch modulation.
 
-use crate::signals::{AudioSignal, Param, Signal};
+use crate::core::{AudioSignal, Param, Signal};
 
 /// Vibrato effect that creates pitch modulation.
 ///

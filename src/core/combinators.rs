@@ -16,7 +16,7 @@ use crate::{AudioSignal, Param, Signal};
 /// # Examples
 ///
 /// ```
-/// use earworm::{SineOscillator, combinators::Multiply};
+/// use earworm::{SineOscillator, Multiply};
 ///
 /// let carrier = SineOscillator::<44100>::new(440.0);
 /// let modulator = SineOscillator::<44100>::new(2.0);
@@ -54,7 +54,7 @@ impl<const SAMPLE_RATE: u32, A: AudioSignal<SAMPLE_RATE>, B: AudioSignal<SAMPLE_
 /// # Examples
 ///
 /// ```
-/// use earworm::{SineOscillator, combinators::Add};
+/// use earworm::{SineOscillator, Add};
 ///
 /// let osc1 = SineOscillator::<44100>::new(440.0);
 /// let osc2 = SineOscillator::<44100>::new(880.0);
@@ -92,7 +92,7 @@ impl<const SAMPLE_RATE: u32, A: AudioSignal<SAMPLE_RATE>, B: AudioSignal<SAMPLE_
 /// # Examples
 ///
 /// ```
-/// use earworm::{SineOscillator, combinators::Gain};
+/// use earworm::{SineOscillator, Gain};
 ///
 /// let osc = SineOscillator::<44100>::new(440.0);
 /// let mut quieter = Gain { source: osc, gain: 0.5.into() };
@@ -119,7 +119,7 @@ impl<const SAMPLE_RATE: u32, S: AudioSignal<SAMPLE_RATE>> AudioSignal<SAMPLE_RAT
 /// # Examples
 ///
 /// ```
-/// use earworm::{SineOscillator, combinators::Offset};
+/// use earworm::{SineOscillator, Offset};
 ///
 /// let osc = SineOscillator::<44100>::new(440.0);
 /// // Shift the signal from [-1, 1] to [0, 2]
@@ -146,7 +146,7 @@ impl<const SAMPLE_RATE: u32, S: AudioSignal<SAMPLE_RATE>> AudioSignal<SAMPLE_RAT
 /// # Examples
 ///
 /// ```
-/// use earworm::{SineOscillator, combinators::Mix2};
+/// use earworm::{SineOscillator, Mix2};
 ///
 /// let osc1 = SineOscillator::<44100>::new(440.0);
 /// let osc2 = SineOscillator::<44100>::new(880.0);
@@ -187,7 +187,7 @@ impl<const SAMPLE_RATE: u32, A: AudioSignal<SAMPLE_RATE>, B: AudioSignal<SAMPLE_
 /// # Examples
 ///
 /// ```
-/// use earworm::{SineOscillator, combinators::Mix3};
+/// use earworm::{SineOscillator, Mix3};
 ///
 /// let osc1 = SineOscillator::<44100>::new(440.0);
 /// let osc2 = SineOscillator::<44100>::new(554.37);
@@ -246,7 +246,7 @@ impl<
 /// # Examples
 ///
 /// ```
-/// use earworm::{SineOscillator, combinators::Mix4};
+/// use earworm::{SineOscillator, Mix4};
 ///
 /// let osc1 = SineOscillator::<44100>::new(440.0);
 /// let osc2 = SineOscillator::<44100>::new(554.37);
@@ -319,7 +319,7 @@ impl<
 /// # Examples
 ///
 /// ```
-/// use earworm::{SineOscillator, combinators::Clamp};
+/// use earworm::{SineOscillator, Clamp};
 ///
 /// let osc = SineOscillator::<44100>::new(440.0);
 /// let mut clipped = Clamp { source: osc, min: -0.5, max: 0.5 };
@@ -347,7 +347,7 @@ impl<const SAMPLE_RATE: u32, S: AudioSignal<SAMPLE_RATE>> AudioSignal<SAMPLE_RAT
 /// # Examples
 ///
 /// ```
-/// use earworm::{SineOscillator, combinators::Map};
+/// use earworm::{SineOscillator, Map};
 ///
 /// let osc = SineOscillator::<44100>::new(440.0);
 /// // Apply a simple waveshaping function
@@ -384,7 +384,7 @@ impl<const SAMPLE_RATE: u32, S: AudioSignal<SAMPLE_RATE>, F> AudioSignal<SAMPLE_
 /// # Examples
 ///
 /// ```
-/// use earworm::{SineOscillator, combinators::Invert};
+/// use earworm::{SineOscillator, Invert};
 ///
 /// let osc = SineOscillator::<44100>::new(440.0);
 /// let mut inverted = Invert { source: osc };
@@ -410,7 +410,7 @@ impl<const SAMPLE_RATE: u32, S: AudioSignal<SAMPLE_RATE>> AudioSignal<SAMPLE_RAT
 /// # Examples
 ///
 /// ```
-/// use earworm::{SineOscillator, combinators::Crossfade};
+/// use earworm::{SineOscillator, Crossfade};
 ///
 /// let osc1 = SineOscillator::<44100>::new(440.0);
 /// let osc2 = SineOscillator::<44100>::new(880.0);
@@ -456,7 +456,7 @@ impl<const SAMPLE_RATE: u32, A: AudioSignal<SAMPLE_RATE>, B: AudioSignal<SAMPLE_
 /// # Examples
 ///
 /// ```
-/// use earworm::{SineOscillator, combinators::Min};
+/// use earworm::{SineOscillator, Min};
 ///
 /// let osc1 = SineOscillator::<44100>::new(440.0);
 /// let osc2 = SineOscillator::<44100>::new(880.0);
@@ -494,7 +494,7 @@ impl<const SAMPLE_RATE: u32, A: AudioSignal<SAMPLE_RATE>, B: AudioSignal<SAMPLE_
 /// # Examples
 ///
 /// ```
-/// use earworm::{SineOscillator, combinators::Max};
+/// use earworm::{SineOscillator, Max};
 ///
 /// let osc1 = SineOscillator::<44100>::new(440.0);
 /// let osc2 = SineOscillator::<44100>::new(880.0);
@@ -532,7 +532,7 @@ impl<const SAMPLE_RATE: u32, A: AudioSignal<SAMPLE_RATE>, B: AudioSignal<SAMPLE_
 /// # Examples
 ///
 /// ```
-/// use earworm::{SineOscillator, combinators::Abs};
+/// use earworm::{SineOscillator, Abs};
 ///
 /// let osc = SineOscillator::<44100>::new(440.0);
 /// let mut rectified = Abs { source: osc };
@@ -558,7 +558,7 @@ impl<const SAMPLE_RATE: u32, S: AudioSignal<SAMPLE_RATE>> AudioSignal<SAMPLE_RAT
 /// # Examples
 ///
 /// ```
-/// use earworm::{SineOscillator, combinators::Gate};
+/// use earworm::{SineOscillator, Gate};
 ///
 /// let osc = SineOscillator::<44100>::new(440.0);
 /// let mut gated = Gate { source: osc, threshold: 0.1.into() };
@@ -589,7 +589,7 @@ impl<const SAMPLE_RATE: u32, S: AudioSignal<SAMPLE_RATE>> AudioSignal<SAMPLE_RAT
 /// # Examples
 ///
 /// ```
-/// use earworm::{SineOscillator, combinators::SignalExt};
+/// use earworm::{SineOscillator, SignalExt};
 ///
 /// let osc1 = SineOscillator::<44100>::new(440.0);
 /// let osc2 = SineOscillator::<44100>::new(2.0);

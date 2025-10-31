@@ -1,6 +1,7 @@
 //! Sine wave oscillator implementation.
 
 use super::Oscillator;
+use crate::core::Pitched;
 use crate::{AudioSignal, Signal};
 use std::f64::consts::PI;
 
@@ -63,7 +64,7 @@ impl<const SAMPLE_RATE: u32> Signal for SineOscillator<SAMPLE_RATE> {
 
 impl<const SAMPLE_RATE: u32> AudioSignal<SAMPLE_RATE> for SineOscillator<SAMPLE_RATE> {}
 
-impl<const SAMPLE_RATE: u32> Oscillator for SineOscillator<SAMPLE_RATE> {
+impl<const SAMPLE_RATE: u32> Pitched for SineOscillator<SAMPLE_RATE> {
     fn set_frequency(&mut self, frequency: f64) {
         self.phase_increment = frequency / SAMPLE_RATE as f64;
     }
@@ -71,7 +72,9 @@ impl<const SAMPLE_RATE: u32> Oscillator for SineOscillator<SAMPLE_RATE> {
     fn frequency(&self) -> f64 {
         self.phase_increment * SAMPLE_RATE as f64
     }
+}
 
+impl<const SAMPLE_RATE: u32> Oscillator for SineOscillator<SAMPLE_RATE> {
     fn reset(&mut self) {
         self.phase = 0.0;
     }

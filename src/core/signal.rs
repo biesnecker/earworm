@@ -35,6 +35,41 @@ pub trait Signal {
     }
 }
 
+/// Minimal trait for anything with a controllable pitch.
+///
+/// This trait provides basic frequency control for any signal that has a
+/// tunable pitch or frequency. It can be implemented by oscillators, filters,
+/// effects, or other signal processors that have a frequency parameter.
+///
+/// # Examples
+///
+/// ```
+/// use earworm::{Pitched, SineOscillator};
+///
+/// // Oscillators implement Pitched, so you need to import the trait
+/// // to use its methods
+/// let mut osc = SineOscillator::<44100>::new(440.0);
+/// assert_eq!(osc.frequency(), 440.0);
+///
+/// osc.set_frequency(880.0);
+/// assert_eq!(osc.frequency(), 880.0);
+/// ```
+pub trait Pitched {
+    /// Sets the frequency of the signal.
+    ///
+    /// # Arguments
+    ///
+    /// * `freq` - New frequency in Hz
+    fn set_frequency(&mut self, freq: f64);
+
+    /// Gets the current frequency of the signal.
+    ///
+    /// # Returns
+    ///
+    /// Current frequency in Hz
+    fn frequency(&self) -> f64;
+}
+
 /// A constant signal that always returns the same value.
 ///
 /// This is a lightweight wrapper around `f64` that implements `Signal`,

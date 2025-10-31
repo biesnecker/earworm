@@ -1,6 +1,6 @@
 //! Bitcrusher effect for lo-fi digital degradation.
 
-use crate::signals::{AudioSignal, Param, Signal};
+use crate::core::{AudioSignal, Param, Signal};
 
 /// Bitcrusher effect that reduces sample rate and bit depth.
 ///
@@ -63,7 +63,7 @@ impl<const SAMPLE_RATE: u32, S: AudioSignal<SAMPLE_RATE>> AudioSignal<SAMPLE_RAT
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::combinators::SignalExt;
+    use crate::core::combinators::SignalExt;
 
     // Helper to create a simple test signal
     struct TestSignal<const SAMPLE_RATE: u32> {

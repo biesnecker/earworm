@@ -1,6 +1,6 @@
 //! Compressor effect for dynamic range control.
 
-use crate::signals::{AudioSignal, Param, Signal};
+use crate::core::{AudioSignal, Param, Signal};
 
 /// Compressor effect for controlling dynamic range.
 ///

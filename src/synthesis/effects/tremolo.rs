@@ -1,6 +1,6 @@
 //! Tremolo effect (amplitude modulation).
 
-use crate::signals::{AudioSignal, Param, Signal};
+use crate::core::{AudioSignal, Param, Signal};
 
 /// Tremolo effect that modulates the amplitude of an audio signal.
 ///
@@ -75,7 +75,7 @@ impl<const SAMPLE_RATE: u32, S: AudioSignal<SAMPLE_RATE>> Tremolo<SAMPLE_RATE, S
     /// let mut tremolo = Tremolo::with_rate(audio, 5.0, 0.5);
     /// ```
     pub fn with_rate(source: S, rate: f64, depth: impl Into<Param>) -> Self {
-        let lfo = crate::oscillators::SineOscillator::<SAMPLE_RATE>::new(rate);
+        let lfo = crate::synthesis::oscillators::SineOscillator::<SAMPLE_RATE>::new(rate);
         Self::new(source, lfo, depth)
     }
 }

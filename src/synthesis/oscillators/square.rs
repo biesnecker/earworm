@@ -1,6 +1,7 @@
 //! Square wave oscillator implementation.
 
 use super::Oscillator;
+use crate::core::Pitched;
 use crate::{AudioSignal, Signal};
 
 pub struct SquareOscillator<const SAMPLE_RATE: u32> {
@@ -31,7 +32,7 @@ impl<const SAMPLE_RATE: u32> Signal for SquareOscillator<SAMPLE_RATE> {
 
 impl<const SAMPLE_RATE: u32> AudioSignal<SAMPLE_RATE> for SquareOscillator<SAMPLE_RATE> {}
 
-impl<const SAMPLE_RATE: u32> Oscillator for SquareOscillator<SAMPLE_RATE> {
+impl<const SAMPLE_RATE: u32> Pitched for SquareOscillator<SAMPLE_RATE> {
     fn set_frequency(&mut self, frequency: f64) {
         self.phase_increment = frequency / SAMPLE_RATE as f64;
     }
@@ -39,7 +40,9 @@ impl<const SAMPLE_RATE: u32> Oscillator for SquareOscillator<SAMPLE_RATE> {
     fn frequency(&self) -> f64 {
         self.phase_increment * SAMPLE_RATE as f64
     }
+}
 
+impl<const SAMPLE_RATE: u32> Oscillator for SquareOscillator<SAMPLE_RATE> {
     fn reset(&mut self) {
         self.phase = 0.0;
     }
