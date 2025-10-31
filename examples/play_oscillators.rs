@@ -12,9 +12,10 @@ use crossterm::{
     event::{KeyCode, KeyEvent},
 };
 use earworm::{
-    PulseOscillator, SawtoothOscillator, Signal, SineOscillator, SquareOscillator,
-    TriangleOscillator,
+    InterpolationMode, PulseOscillator, SawtoothOscillator, Signal, SineOscillator,
+    SquareOscillator, TriangleOscillator, WavetableOscillator,
 };
+use std::f64::consts::PI;
 use std::io::{Write, stdout};
 
 const SAMPLE_RATE: u32 = 44100;
@@ -27,6 +28,9 @@ enum OscillatorType {
     Square,
     Pulse,
     PulseLFO,
+    WavetableHarmonics,
+    WavetableOrgan,
+    WavetableVowel,
 }
 
 impl OscillatorType {
@@ -37,7 +41,10 @@ impl OscillatorType {
             OscillatorType::Sawtooth => OscillatorType::Square,
             OscillatorType::Square => OscillatorType::Pulse,
             OscillatorType::Pulse => OscillatorType::PulseLFO,
-            OscillatorType::PulseLFO => OscillatorType::Sine,
+            OscillatorType::PulseLFO => OscillatorType::WavetableHarmonics,
+            OscillatorType::WavetableHarmonics => OscillatorType::WavetableOrgan,
+            OscillatorType::WavetableOrgan => OscillatorType::WavetableVowel,
+            OscillatorType::WavetableVowel => OscillatorType::Sine,
         }
     }
 
@@ -49,6 +56,9 @@ impl OscillatorType {
             OscillatorType::Square => "Square",
             OscillatorType::Pulse => "Pulse (25%)",
             OscillatorType::PulseLFO => "Pulse (PWM)",
+            OscillatorType::WavetableHarmonics => "Wavetable: Additive (harmonics 1,2,3,5)",
+            OscillatorType::WavetableOrgan => "Wavetable: Organ (drawbar simulation)",
+            OscillatorType::WavetableVowel => "Wavetable: Vowel 'ah' (formant peaks)",
         }
     }
 }
@@ -60,6 +70,9 @@ enum OscillatorWrapper {
     Square(SquareOscillator<SAMPLE_RATE>),
     Pulse(PulseOscillator<SAMPLE_RATE>),
     PulseLFO(PulseOscillator<SAMPLE_RATE>),
+    WavetableHarmonics(WavetableOscillator<SAMPLE_RATE>),
+    WavetableOrgan(WavetableOscillator<SAMPLE_RATE>),
+    WavetableVowel(WavetableOscillator<SAMPLE_RATE>),
 }
 
 impl OscillatorWrapper {
@@ -82,6 +95,53 @@ impl OscillatorWrapper {
                 let lfo = SineOscillator::<SAMPLE_RATE>::new(0.5);
                 OscillatorWrapper::PulseLFO(PulseOscillator::new(frequency, lfo.into()))
             }
+            OscillatorType::WavetableHarmonics => {
+                // Additive synthesis: fundamental + 2nd + 3rd + 5th harmonics
+                // Creates a bright, harmonic-rich sound
+                OscillatorWrapper::WavetableHarmonics(
+                    WavetableOscillator::<SAMPLE_RATE>::from_function(frequency, 1024, |phase| {
+                        let p = phase * 2.0 * PI;
+                        (p.sin()
+                            + 0.5 * (2.0 * p).sin()
+                            + 0.33 * (3.0 * p).sin()
+                            + 0.2 * (5.0 * p).sin())
+                            / 2.03 // Normalize
+                    })
+                    .with_interpolation(InterpolationMode::Linear),
+                )
+            }
+            OscillatorType::WavetableOrgan => {
+                // Hammond organ-style drawbar settings (888000000)
+                // 16', 8', 5⅓' feet pipes
+                OscillatorWrapper::WavetableOrgan(
+                    WavetableOscillator::<SAMPLE_RATE>::from_function(frequency, 2048, |phase| {
+                        let p = phase * 2.0 * PI;
+                        (0.8 * (0.5 * p).sin() + // 16' (sub-octave)
+                         0.8 * p.sin() +          // 8' (fundamental)
+                         0.8 * (1.5 * p).sin())   // 5⅓' (3rd harmonic)
+                            / 2.4 // Normalize
+                    })
+                    .with_interpolation(InterpolationMode::Cubic),
+                )
+            }
+            OscillatorType::WavetableVowel => {
+                // Vowel formant simulation (approximating 'ah' sound)
+                // Uses formant peaks at specific harmonic regions
+                OscillatorWrapper::WavetableVowel(
+                    WavetableOscillator::<SAMPLE_RATE>::from_function(frequency, 2048, |phase| {
+                        let p = phase * 2.0 * PI;
+                        // Simplified formant structure
+                        (p.sin() + // F0
+                         0.6 * (2.0 * p).sin() + // F1 region (low)
+                         0.4 * (3.0 * p).sin() +
+                         0.7 * (6.0 * p).sin() + // F2 region (mid)
+                         0.3 * (8.0 * p).sin() +
+                         0.2 * (12.0 * p).sin()) // F3 region (high)
+                            / 3.2 // Normalize
+                    })
+                    .with_interpolation(InterpolationMode::Cubic),
+                )
+            }
         }
     }
 }
@@ -95,6 +155,9 @@ impl Signal for OscillatorWrapper {
             OscillatorWrapper::Square(osc) => osc.next_sample(),
             OscillatorWrapper::Pulse(osc) => osc.next_sample(),
             OscillatorWrapper::PulseLFO(osc) => osc.next_sample(),
+            OscillatorWrapper::WavetableHarmonics(osc) => osc.next_sample(),
+            OscillatorWrapper::WavetableOrgan(osc) => osc.next_sample(),
+            OscillatorWrapper::WavetableVowel(osc) => osc.next_sample(),
         }
     }
 }

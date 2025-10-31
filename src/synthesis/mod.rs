@@ -23,6 +23,6 @@ pub use envelopes::Curve;
 pub use filters::{BiquadFilter, FilterType};
 pub use noise::{PinkNoise, WhiteNoise};
 pub use oscillators::{
-    Oscillator, PulseOscillator, SawtoothOscillator, SineOscillator, SquareOscillator,
-    TriangleOscillator,
+    InterpolationMode, Oscillator, PulseOscillator, SawtoothOscillator, SineOscillator,
+    SquareOscillator, TriangleOscillator, WavetableOscillator,
 };

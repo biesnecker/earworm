@@ -8,6 +8,7 @@ mod sine;
 mod square;
 mod traits;
 mod triangle;
+mod wavetable;
 
 pub use pulse::PulseOscillator;
 pub use sawtooth::SawtoothOscillator;
@@ -15,3 +16,4 @@ pub use sine::SineOscillator;
 pub use square::SquareOscillator;
 pub use traits::Oscillator;
 pub use triangle::TriangleOscillator;
+pub use wavetable::{InterpolationMode, WavetableOscillator};

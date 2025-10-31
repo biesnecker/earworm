@@ -29,8 +29,9 @@ pub use core::{
 #[cfg(feature = "synth")]
 pub use synthesis::{
     AudioSignalExt, BiquadFilter, Bitcrusher, Compressor, Curve, Delay, Distortion, FilterType,
-    Limiter, Oscillator, PinkNoise, PulseOscillator, SawtoothOscillator, SineOscillator,
-    SquareOscillator, Tremolo, TriangleOscillator, Vibrato, WhiteNoise,
+    InterpolationMode, Limiter, Oscillator, PinkNoise, PulseOscillator, SawtoothOscillator,
+    SineOscillator, SquareOscillator, Tremolo, TriangleOscillator, Vibrato, WavetableOscillator,
+    WhiteNoise,
 };
 
 // Re-export music types (only with music feature)
